@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Napkin Math Latency CSV</title>
+</head>
+<body>
+  <h1>Napkin Math Latency CSV</h1>
+
+  <p>
+    <input id="file" type="file" accept=".csv,text/csv">
+    <button id="sample">Use sample data</button>
+  </p>
+
+  <p>
+    <input id="path" size="70" value="target/napkin-latency/smoke-script-getpid.csv">
+    <button id="load">Load path</button>
+    <small>Path loading only works through http://localhost. For file://, use the file picker or drop the CSV on this page.</small>
+  </p>
+
+  <p>
+    Column:
+    <select id="column">
+      <option value="adjusted_ns">adjusted_ns</option>
+      <option value="raw_ns">raw_ns</option>
+    </select>
+    Buckets:
+    <input id="buckets" type="number" value="40" min="1" max="200">
+  </p>
+
+  <p id="status">No CSV loaded.</p>
+
+  <h2>Summary</h2>
+  <pre id="summary"></pre>
+
+  <h2>Histogram</h2>
+  <pre id="histogram"></pre>
+
+  <h2>Percentiles</h2>
+  <table border="1" cellpadding="6" cellspacing="0">
+    <thead>
+      <tr>
+        <th>Percentile</th>
+        <th>Latency</th>
+      </tr>
+    </thead>
+    <tbody id="percentiles"></tbody>
+  </table>
+
+  <script>
+    const state = { rows: [], headers: [], source: "" };
+
+    const fileInput = document.getElementById("file");
+    const sampleButton = document.getElementById("sample");
+    const pathInput = document.getElementById("path");
+    const loadButton = document.getElementById("load");
+    const columnSelect = document.getElementById("column");
+    const bucketInput = document.getElementById("buckets");
+    const statusEl = document.getElementById("status");
+    const summaryEl = document.getElementById("summary");
+    const histogramEl = document.getElementById("histogram");
+    const percentilesEl = document.getElementById("percentiles");
+
+    fileInput.addEventListener("change", async () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+      try {
+        loadText(await file.text(), file.name);
+      } catch (error) {
+        showError(error);
+      }
+    });
+
+    sampleButton.addEventListener("click", () => {
+      loadText(
+        [
+          "sample,raw_ns,adjusted_ns",
+          "0,42100,41800",
+          "1,43900,43600",
+          "2,40120,39820",
+          "3,99000,98700",
+          "4,45500,45200",
+          "5,47100,46800",
+          "6,44100,43800",
+          "7,120000,119700",
+          "8,43000,42700",
+          "9,46000,45700"
+        ].join("\n"),
+        "sample data"
+      );
+    });
+
+    loadButton.addEventListener("click", async () => {
+      const path = pathInput.value.trim();
+      if (!path) return;
+      statusEl.textContent = `Loading ${path}...`;
+      try {
+        if (location.protocol === "file:") {
+          throw new Error("browser blocks fetch from file:// pages; use the file picker or drag/drop");
+        }
+        const response = await fetch(path, { cache: "no-store" });
+        if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+        loadText(await response.text(), path);
+      } catch (error) {
+        showError(error);
+      }
+    });
+
+    columnSelect.addEventListener("change", render);
+    bucketInput.addEventListener("input", render);
+
+    document.body.addEventListener("dragover", (event) => {
+      event.preventDefault();
+    });
+
+    document.body.addEventListener("drop", async (event) => {
+      event.preventDefault();
+      const file = event.dataTransfer.files && event.dataTransfer.files[0];
+      if (!file) return;
+      try {
+        loadText(await file.text(), file.name);
+      } catch (error) {
+        showError(error);
+      }
+    });
+
+    function loadText(text, source) {
+      const parsed = parseCsv(text);
+      if (!parsed.headers.length) throw new Error("CSV has no header row");
+      if (!parsed.rows.length) throw new Error("CSV has no data rows");
+      state.rows = parsed.rows;
+      state.headers = parsed.headers;
+      state.source = source;
+      syncColumns();
+      render();
+    }
+
+    function syncColumns() {
+      const previous = columnSelect.value;
+      const numericHeaders = state.headers.filter((header) => {
+        if (header === "sample") return false;
+        return state.rows.some((row) => Number.isFinite(Number(row[header])));
+      });
+      const preferred =
+        ["adjusted_ns", "raw_ns", "latency_ns"].find((header) => numericHeaders.includes(header)) ||
+        numericHeaders[0];
+
+      columnSelect.innerHTML = "";
+      if (!numericHeaders.length) {
+        throw new Error(`No numeric latency columns found. Headers: ${state.headers.join(", ")}`);
+      }
+      for (const header of numericHeaders) {
+        const option = document.createElement("option");
+        option.value = header;
+        option.textContent = header;
+        columnSelect.appendChild(option);
+      }
+      columnSelect.value = numericHeaders.includes(previous) ? previous : preferred;
+    }
+
+    function render() {
+      if (!state.rows.length) return;
+
+      const column = columnSelect.value;
+      const values = state.rows
+        .map((row) => Number(row[column]))
+        .filter((value) => Number.isFinite(value) && value >= 0)
+        .sort((a, b) => a - b);
+
+      if (!values.length) {
+        statusEl.textContent = `No numeric values in ${column}.`;
+        summaryEl.textContent = "";
+        histogramEl.textContent = "";
+        percentilesEl.innerHTML = "";
+        return;
+      }
+
+      const stats = summarize(values);
+      const bucketCount = Math.max(1, Number(bucketInput.value) || 40);
+
+      statusEl.textContent = `${state.source}: ${values.length.toLocaleString()} samples from ${column}`;
+      summaryEl.textContent = [
+        `samples: ${stats.count}`,
+        `min:     ${formatNs(stats.min)}`,
+        `p50:     ${formatNs(stats.p50)}`,
+        `p90:     ${formatNs(stats.p90)}`,
+        `p95:     ${formatNs(stats.p95)}`,
+        `p99:     ${formatNs(stats.p99)}`,
+        `p99.9:   ${formatNs(stats.p999)}`,
+        `max:     ${formatNs(stats.max)}`,
+        `mean:    ${formatNs(stats.mean)}`,
+        `stdev:   ${formatNs(stats.stdev)}`
+      ].join("\n");
+
+      histogramEl.textContent = renderHistogram(values, bucketCount);
+
+      percentilesEl.innerHTML = [
+        ["p0", stats.min],
+        ["p50", stats.p50],
+        ["p75", stats.p75],
+        ["p90", stats.p90],
+        ["p95", stats.p95],
+        ["p99", stats.p99],
+        ["p99.9", stats.p999],
+        ["p100", stats.max]
+      ]
+        .map(([name, value]) => `<tr><td>${escapeHtml(name)}</td><td>${escapeHtml(formatNs(value))}</td></tr>`)
+        .join("");
+    }
+
+    function showError(error) {
+      statusEl.textContent = `Could not load CSV: ${error.message || error}`;
+      summaryEl.textContent = "";
+      histogramEl.textContent = "";
+      percentilesEl.innerHTML = "";
+    }
+
+    function summarize(values) {
+      const count = values.length;
+      const mean = values.reduce((sum, value) => sum + value, 0) / count;
+      const variance =
+        values.reduce((sum, value) => {
+          const delta = value - mean;
+          return sum + delta * delta;
+        }, 0) / count;
+
+      return {
+        count,
+        min: values[0],
+        p50: percentile(values, 50),
+        p75: percentile(values, 75),
+        p90: percentile(values, 90),
+        p95: percentile(values, 95),
+        p99: percentile(values, 99),
+        p999: percentile(values, 99.9),
+        max: values[count - 1],
+        mean,
+        stdev: Math.sqrt(variance)
+      };
+    }
+
+    function renderHistogram(values, bucketCount) {
+      const min = values[0];
+      const max = values[values.length - 1];
+      if (min === max) {
+        return `${formatNs(min).padStart(12)} - ${formatNs(max).padStart(12)} | ${String(values.length).padStart(8)} ${"#".repeat(50)}`;
+      }
+
+      const width = (max - min) / bucketCount;
+      const buckets = Array.from({ length: bucketCount }, (_, index) => ({
+        low: min + width * index,
+        high: index === bucketCount - 1 ? max : min + width * (index + 1),
+        count: 0
+      }));
+
+      for (const value of values) {
+        const index = Math.min(bucketCount - 1, Math.floor((value - min) / width));
+        buckets[index].count += 1;
+      }
+
+      const maxCount = Math.max(...buckets.map((bucket) => bucket.count), 1);
+      return buckets
+        .filter((bucket) => bucket.count > 0)
+        .map((bucket) => {
+          const bar = "#".repeat(Math.max(1, Math.round((bucket.count / maxCount) * 50)));
+          return `${formatNs(bucket.low).padStart(12)} - ${formatNs(bucket.high).padStart(12)} | ${String(bucket.count).padStart(8)} ${bar}`;
+        })
+        .join("\n");
+    }
+
+    function percentile(values, p) {
+      if (p <= 0) return values[0];
+      if (p >= 100) return values[values.length - 1];
+      const rank = (p / 100) * (values.length - 1);
+      const low = Math.floor(rank);
+      const high = Math.ceil(rank);
+      const weight = rank - low;
+      return values[low] * (1 - weight) + values[high] * weight;
+    }
+
+    function parseCsv(text) {
+      const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/).filter((line) => line.trim());
+      if (!lines.length) return { headers: [], rows: [] };
+      const headers = parseCsvLine(lines[0]).map((header) => header.trim());
+      const rows = lines.slice(1).map((line) => {
+        const cells = parseCsvLine(line);
+        const row = {};
+        headers.forEach((header, index) => {
+          row[header] = cells[index] || "";
+        });
+        return row;
+      });
+      return { headers, rows };
+    }
+
+    function parseCsvLine(line) {
+      const cells = [];
+      let cell = "";
+      let quoted = false;
+
+      for (let i = 0; i < line.length; i += 1) {
+        const char = line[i];
+        if (char === '"' && quoted && line[i + 1] === '"') {
+          cell += '"';
+          i += 1;
+        } else if (char === '"') {
+          quoted = !quoted;
+        } else if (char === "," && !quoted) {
+          cells.push(cell);
+          cell = "";
+        } else {
+          cell += char;
+        }
+      }
+
+      cells.push(cell);
+      return cells;
+    }
+
+    function formatNs(value) {
+      if (value < 1000) return `${round(value)} ns`;
+      if (value < 1_000_000) return `${round(value / 1000)} us`;
+      if (value < 1_000_000_000) return `${round(value / 1_000_000)} ms`;
+      return `${round(value / 1_000_000_000)} s`;
+    }
+
+    function round(value) {
+      return String(Math.round(value * 100) / 100);
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+  </script>
+</body>
+</html>

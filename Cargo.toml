@@ -1,0 +1,42 @@
+[package]
+name = "napkin-math"
+version = "0.1.0"
+authors = ["Simon Eskildsen <sirup@sirupsen.com>"]
+edition = "2018"
+
+[profile.release]
+debug = true
+overflow-checks = false
+
+[lib]
+name = "napkin_math"
+path = "src/lib.rs"
+
+[dependencies]
+byte-unit = "3.0"
+rand = { features = ["small_rng"], version = "0.7.3" }
+num-format = "0.4.0"
+failure = "*"
+page_size = "*"
+redis = "*"
+clap = "*"
+libc = "*"
+regex = "*"
+sha2 = "0.10.7"
+crc32fast = "*"
+mysql = "*"
+criterion = "*"
+core_affinity = "*"
+bitpacking = "0.5"
+lz4_flex = "0.11"
+serde = { version = "1", features = ["derive"] }
+bincode = "1"
+serde_json = "1"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+jemallocator = "*"
+rio = "0.9.3"
+
+[[bench]]
+name = "napkin_math"
+harness = false
