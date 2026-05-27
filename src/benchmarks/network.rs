@@ -4,8 +4,8 @@ use std::net::{TcpListener, TcpStream};
 use std::thread;
 use std::time::{Duration, Instant};
 
-// TCP Echo Server (32 KiB)
-// README: ~50 μs latency, ~500 MiB/s throughput
+// TCP echo server (32 KiB), localhost.
+// Measures the kernel's TCP stack overhead without real network latency.
 pub fn tcp_echo() -> Measurement {
     let buf_size: usize = 32 * 1024;
 
@@ -53,12 +53,6 @@ pub fn tcp_echo() -> Measurement {
         throughput_bytes_s: Some(buf_size as f64 / (ns_per_op / 1e9)),
     }
 }
-
-// Network Same-Zone, Inside VPC, Outside VPC, Same Region, Cross Region, Premium
-//
-// These require a remote host. Set NAPKIN_REMOTE_HOST to an IP or hostname
-// running a TCP echo server (e.g. `nc -lk 9999 -e /bin/cat`).
-// Skipped when not configured.
 
 pub fn run() -> Vec<Measurement> {
     vec![tcp_echo()]

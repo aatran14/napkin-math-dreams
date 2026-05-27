@@ -1,19 +1,17 @@
 use crate::benchmarks::{bench, black_box, Measurement};
 
-// System Call
-// README: ~300 ns latency
+// System call (getpid).
+// Cheapest possible syscall, so this is the floor cost of any kernel interaction.
+// Spectre/Meltdown mitigations made this 2-5x more expensive on affected CPUs.
 pub fn getpid() -> Measurement {
     bench("syscall", 0, 5, || {
         black_box(unsafe { libc::getpid() });
     })
 }
 
-// Context Switch
-// README: ~10 μs latency
-//
-// Measures thread-to-thread context switch via a pipe ping-pong.
-// Each iteration: write one byte on thread A, read it on thread B,
-// write back, read on A. That's two context switches per round trip.
+// Context switch.
+// Unix socket ping-pong forces a context switch on each send/receive.
+// Two switches per round trip, so we divide by 2.
 pub fn context_switch() -> Measurement {
     use std::io::{Read, Write};
     use std::os::unix::net::UnixStream;

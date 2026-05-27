@@ -1,7 +1,7 @@
 use crate::benchmarks::{bench, black_box, Measurement};
 
-// Compression
-// README: ~500 MiB/s throughput
+// LZ4 compression (1 MiB).
+// LZ4 is the standard fast compressor used in databases (ClickHouse, RocksDB), ZFS, network protocols.
 pub fn compress() -> Measurement {
     let size: usize = 1024 * 1024; // 1 MiB
     let data = make_compressible_data(size);
@@ -12,8 +12,8 @@ pub fn compress() -> Measurement {
     })
 }
 
-// Decompression
-// README: ~1 GiB/s throughput
+// LZ4 decompression (1 MiB).
+// Decompression is typically faster than compression.
 pub fn decompress() -> Measurement {
     let size: usize = 1024 * 1024; // 1 MiB
     let data = make_compressible_data(size);

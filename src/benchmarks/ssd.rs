@@ -6,13 +6,13 @@ fn bench_file() -> String {
     std::env::var("NAPKIN_BENCH_FILE").unwrap_or_else(|_| "/tmp/napkin_daily.bin".into())
 }
 
-// Sequential SSD Read (8 KiB)
-// README: ~1 μs latency, ~8 GiB/s throughput
+// Sequential SSD read (8 KiB).
+// Kernel prefetches ahead, so this is best-case disk read.
 pub fn seq_read() -> Measurement {
     let path = bench_file();
     let buf_size: usize = 8 * 1024;
 
-    // write a 1 GiB file
+    // write a 1 GiB test file
     {
         let mut f = OpenOptions::new().create(true).write(true).truncate(true).open(&path).unwrap();
         let zeros = vec![0u8; 1024 * 1024];
@@ -35,8 +35,8 @@ pub fn seq_read() -> Measurement {
     m
 }
 
-// Sequential SSD Write, -fsync (8 KiB)
-// README: ~2 μs latency, ~3 GiB/s throughput
+// Sequential SSD write without fsync (8 KiB).
+// Writes go to the kernel page cache and return immediately. Not durable, a crash loses this data.
 pub fn seq_write_no_fsync() -> Measurement {
     let path = bench_file();
     let buf_size: usize = 8 * 1024;
@@ -52,8 +52,9 @@ pub fn seq_write_no_fsync() -> Measurement {
     m
 }
 
-// Sequential SSD Write, +fsync (8 KiB)
-// README: ~300 μs latency, ~30 MiB/s throughput
+// Sequential SSD write with fsync (8 KiB).
+// fsync() waits for the SSD's flash cells to actually write. ~100x slower than without.
+// This is what databases pay for every commit.
 pub fn seq_write_fsync() -> Measurement {
     let path = bench_file();
     let buf_size: usize = 8 * 1024;
@@ -70,15 +71,16 @@ pub fn seq_write_fsync() -> Measurement {
     m
 }
 
-// Random SSD Read (8 KiB)
-// README: ~100 μs latency, ~70 MiB/s throughput
+// Random SSD read (8 KiB).
+// Shuffled offsets defeat the SSD's read-ahead.
+// 8 GiB file is larger than RAM so reads hit the actual SSD, not page cache.
 pub fn random_read() -> Measurement {
     let path = bench_file();
     let buf_size: usize = 8 * 1024;
     let file_size: usize = 8 * 1024 * 1024 * 1024; // 8 GiB
     let page_size = 4096usize;
 
-    // write a large file
+    // 8 GiB file, larger than RAM on most machines, to avoid page cache hits
     {
         let mut f = OpenOptions::new().create(true).write(true).truncate(true).open(&path).unwrap();
         let zeros = vec![0u8; 1024 * 1024];

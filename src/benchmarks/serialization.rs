@@ -18,8 +18,8 @@ fn make_record() -> Record {
     }
 }
 
-// Fast Serialization (e.g. bincode, flatbuffers, cap'n proto)
-// README: ~1 GiB/s throughput
+// Fast serialization (bincode).
+// Binary formats dump memory layout with minimal transformation.
 pub fn fast_serialize() -> Measurement {
     let record = make_record();
     let size = bincode::serialized_size(&record).unwrap() as usize;
@@ -29,8 +29,7 @@ pub fn fast_serialize() -> Measurement {
     })
 }
 
-// Fast Deserialization
-// README: ~1 GiB/s throughput
+// Fast deserialization (bincode).
 pub fn fast_deserialize() -> Measurement {
     let record = make_record();
     let encoded = bincode::serialize(&record).unwrap();
@@ -41,8 +40,8 @@ pub fn fast_deserialize() -> Measurement {
     })
 }
 
-// Serialization (e.g. JSON, standard protobuf)
-// README: ~100 MiB/s throughput
+// Serialization (JSON).
+// Text formats require parsing and string conversion, ~10x slower than binary.
 pub fn slow_serialize() -> Measurement {
     let record = make_record();
     let size = serde_json::to_vec(&record).unwrap().len();
@@ -52,8 +51,7 @@ pub fn slow_serialize() -> Measurement {
     })
 }
 
-// Deserialization (e.g. JSON)
-// README: ~100 MiB/s throughput
+// Deserialization (JSON).
 pub fn slow_deserialize() -> Measurement {
     let record = make_record();
     let encoded = serde_json::to_vec(&record).unwrap();

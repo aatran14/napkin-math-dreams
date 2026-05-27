@@ -26,8 +26,15 @@ pub fn crypto() -> Measurement {
     })
 }
 
-// siphash later
-// blake3?
+pub fn siphash() -> Measurement {
+    let data: Vec<u8> = (0..64).map(|i| i as u8).collect();
+
+    bench("hash_siphash", 64, 5, || {
+        let mut hasher = DefaultHasher::new();
+        hasher.write(&data);
+        black_box(hasher.finish());
+    })
+}
 
 pub fn run() -> Vec<Measurement> {
     vec![non_crypto(), crypto(), siphash()]

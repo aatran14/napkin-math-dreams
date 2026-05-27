@@ -4,11 +4,11 @@ use rand::thread_rng;
 use std::sync::{Arc, Barrier};
 use std::thread;
 
-// Sequential Memory R/W (64 bytes) — single thread
-// README: ~0.5 ns latency, ~20 GiB/s throughput
+// Sequential Memory Read (single thread ver.)
+// 4 GiB buffer exceeds L3 cache (typically 30-50 MiB), forcing reads to DRAM
 pub fn seq_read_single() -> Measurement {
     let bytes_per_iter: usize = 64;
-    let n = 4 * 1024 * 1024 * 1024usize / bytes_per_iter; // 4 GiB
+    let n = 4 * 1024 * 1024 * 1024usize / bytes_per_iter;
     let vec: Vec<[u64; 8]> = (0..n).map(|i| [i as u64; 8]).collect();
     let mut i = 0usize;
 
@@ -19,8 +19,8 @@ pub fn seq_read_single() -> Measurement {
     })
 }
 
-// Sequential Memory R/W (64 bytes) — threaded
-// README: ~200 GiB/s throughput
+// Sequential Memory Read (threaded ver.)
+// All cores reading in parallel to saturate the memory bus
 pub fn seq_read_threaded() -> Measurement {
     let bytes_per_iter: usize = 64;
     let n = 4 * 1024 * 1024 * 1024usize / bytes_per_iter;
@@ -85,11 +85,12 @@ pub fn seq_read_threaded() -> Measurement {
     }
 }
 
-// Random Memory R/W (64 bytes)
-// README: ~20 ns latency, ~3 GiB/s throughput
+// Random Memory Read.
+// Shuffled access pattern defeats the prefetcher, so every read is a cache miss to DRAM.
+// This measures memory latency, not bandwidth.
 pub fn random_read() -> Measurement {
     let bytes_per_iter: usize = 64;
-    let n = 1024 * 1024 * 1024usize / bytes_per_iter; // 1 GiB
+    let n = 1024 * 1024 * 1024usize / bytes_per_iter;
     let vec: Vec<[u64; 8]> = (0..n).map(|i| [i as u64; 8]).collect();
 
     let mut order: Vec<usize> = (0..n).collect();

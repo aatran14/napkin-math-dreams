@@ -1,10 +1,11 @@
 use crate::benchmarks::{Measurement};
 use std::time::{Duration, Instant};
 
-// Sorting (64-bit integers)
-// README: ~500 MiB/s throughput
+// Sort 1 MiB of random u64s.
+// Fits in L2/L3 cache, so this is CPU-bound (branch prediction, comparisons).
+// sort_unstable avoids allocation overhead from the stable sort's merge buffer.
 pub fn sort_u64() -> Measurement {
-    let n = 1024 * 1024 / 8; // 1 MiB of u64s
+    let n = 1024 * 1024 / 8;
     let size_bytes = n * 8;
     let original: Vec<u64> = (0..n).map(|_| rand::random::<u64>()).collect();
 
