@@ -10,12 +10,14 @@ pub fn seq_read_single() -> Measurement {
     let bytes_per_iter: usize = 64;
     let n = 4 * 1024 * 1024 * 1024usize / bytes_per_iter;
     let vec: Vec<[u64; 8]> = (0..n).map(|i| [i as u64; 8]).collect();
-    let mut i = 0usize;
+    let total_bytes = n * bytes_per_iter;
 
-    bench("seq_mem_read_single", bytes_per_iter, 5, || {
-        black_box(vec[i]);
-        i += 1;
-        if i >= vec.len() { i = 0; }
+    bench("seq_mem_read_single", total_bytes, 5, || {
+        let mut sum = 0u64;
+        for i in 0..n {
+            sum = sum.wrapping_add(vec[i][0]);
+        }
+        black_box(sum);
     })
 }
 
