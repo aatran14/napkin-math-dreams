@@ -1,6 +1,6 @@
 # Napkin Math Dreams
 
-Daily benchmark measurements on real hardware. Inspired by
+Daily benchmark measurements on real hardware. Forked from
 [sirupsen/napkin-math](https://github.com/sirupsen/napkin-math).
 
 ## Numbers
@@ -39,7 +39,7 @@ Target machines — one per architecture per cloud.
 
 | Cloud | Intel | AMD | ARM |
 | ----- | ----- | --- | --- |
-| GCP   | [ ] C4  | [ ] C4D  | [ ] C4A  |
+| GCP   | [x] C4  | [x] C4D  | [x] C4A  |
 | AWS   | [ ] C7i | [ ] C7a  | [ ] C8g  |
 | Azure | [ ] Dv6 | [ ] Dav6 | [ ] Dpv6 |
 
