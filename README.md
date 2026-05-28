@@ -39,9 +39,19 @@ Target machines — one per architecture per cloud.
 
 | Cloud | Intel | AMD | ARM |
 | ----- | ----- | --- | --- |
-| GCP   | [x] C4  | [x] C4D  | [x] C4A  |
-| AWS   | [ ] C7i | [ ] C7a  | [ ] C8g  |
-| Azure | [ ] Dv6 | [ ] Dav6 | [ ] Dpv6 |
+| GCP   | C4  | C4D  | C4A  |
+| AWS   | C7i | C7a  | C8g  |
+| Azure | Dv6 | Dav6 | Dpv6 |
+
+- [x] GCP C4 (Intel)
+- [x] GCP C4D (AMD)
+- [x] GCP C4A (ARM)
+- [ ] AWS C7i (Intel)
+- [ ] AWS C7a (AMD)
+- [ ] AWS C8g (ARM)
+- [ ] Azure Dv6 (Intel)
+- [ ] Azure Dav6 (AMD)
+- [ ] Azure Dpv6 (ARM)
 
 ## Running
 
