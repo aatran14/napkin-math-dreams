@@ -46,8 +46,10 @@ gcloud compute ssh "$NAME" --zone="$ZONE" --command="
 "
 
 echo "uploading repo..."
-gcloud compute scp --recurse --zone="$ZONE" --compress \
-  "$REPO_DIR" "$NAME":~/napkin-math-dreams
+tar czf /tmp/${NAME}-repo.tar.gz -C "$REPO_DIR" --exclude=target --exclude=.git --exclude=SIMON.md .
+gcloud compute scp /tmp/${NAME}-repo.tar.gz "$NAME":~/repo.tar.gz --zone="$ZONE"
+rm -f /tmp/${NAME}-repo.tar.gz
+gcloud compute ssh "$NAME" --zone="$ZONE" --command="mkdir -p ~/napkin-math-dreams && tar xzf ~/repo.tar.gz -C ~/napkin-math-dreams"
 
 echo "building..."
 gcloud compute ssh "$NAME" --zone="$ZONE" --command="
@@ -67,6 +69,12 @@ gcloud compute ssh "$NAME" --zone="$ZONE" --command="
   fi
 "
 
+echo "tuning VM for stable benchmarks..."
+gcloud compute ssh "$NAME" --zone="$ZONE" --command="
+  cd napkin-math-dreams
+  sudo bash tuning/bench_stable.sh
+"
+
 echo "running benchmarks..."
 gcloud compute ssh "$NAME" --zone="$ZONE" --command="
   source ~/.cargo/env
@@ -80,7 +88,15 @@ gcloud compute ssh "$NAME" --zone="$ZONE" --command="
 "
 
 echo "pulling results..."
-gcloud compute scp "$NAME":~/napkin-math-dreams/data/dead.csv "$REPO_DIR/data/${NAME}.csv" --zone="$ZONE"
+gcloud compute scp "$NAME":~/napkin-math-dreams/data/dead.csv "/tmp/${NAME}.csv" --zone="$ZONE"
+
+# merge into dead.csv (skip header, append data rows)
+# use lockfile to prevent concurrent panes from interleaving
+LOCKFILE="$REPO_DIR/data/.dead.csv.lock"
+while ! mkdir "$LOCKFILE" 2>/dev/null; do sleep 0.5; done
+tail -n +2 "/tmp/${NAME}.csv" >> "$REPO_DIR/data/dead.csv"
+rmdir "$LOCKFILE"
+rm -f "/tmp/${NAME}.csv"
 
 echo ""
-echo "=== $NAME done! results in data/${NAME}.csv ==="
+echo "=== $NAME done! results merged into data/dead.csv ==="

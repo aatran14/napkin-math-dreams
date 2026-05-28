@@ -1,80 +1,61 @@
-date,machine,config,operation,latency_ns,throughput_bytes_s
-2026-05-24,local-test,baseline,seq_mem_read_single,21.17,3023610561
-2026-05-24,local-test,baseline,seq_mem_read_threaded,18897554.09,227276359439
-2026-05-24,local-test,baseline,mem_random_rw,44.01,1454269466
-2026-05-24,local-test,baseline,hash_non_crypto,26.22,2440982559
-2026-05-24,local-test,baseline,hash_crypto,236.89,270168721
-2026-05-24,local-test,baseline,syscall,18.32,
-2026-05-24,local-test,baseline,context_switch,2347.43,
-2026-05-24,local-test,baseline,ssd_read_seq,701.47,11678355885
-2026-05-24,local-test,baseline,ssd_write_no_fsync,3688.66,2220857849
-2026-05-24,local-test,baseline,ssd_write_fsync,4086597.83,2004601
-2026-05-24,local-test,baseline,ssd_read_random,51128.93,160222411
-2026-05-24,local-test,baseline,tcp_echo,21712.00,1509211802
-2026-05-24,local-test,baseline,sort_64bit,,1040479312
-2026-05-24,local-test,baseline,compression,33048.21,31728679804
-2026-05-24,local-test,baseline,decompression,77782.08,13480945488
-2026-05-24,local-test,baseline,serialization_fast,32.55,4792849580
-2026-05-24,local-test,baseline,deserialization_fast,56.16,2777569493
-2026-05-24,local-test,baseline,serialization,346.18,413084154
-2026-05-24,local-test,baseline,deserialization,224.73,636314595
-2026-05-27,gcp-c4-standard-8-lssd,baseline,seq_mem_read_single,31.06,2060260537
-2026-05-27,gcp-c4-standard-8-lssd,baseline,seq_mem_read_threaded,61168259.18,70215620869
-2026-05-27,gcp-c4-standard-8-lssd,baseline,mem_random_rw,217.59,294131632
-2026-05-27,gcp-c4-standard-8-lssd,baseline,hash_non_crypto,40.07,1597346343
-2026-05-27,gcp-c4-standard-8-lssd,baseline,hash_crypto,116.40,549831712
-2026-05-27,gcp-c4-standard-8-lssd,baseline,hash_siphash,39.98,1600982550
-2026-05-27,gcp-c4-standard-8-lssd,baseline,syscall,103.21,
-2026-05-27,gcp-c4-standard-8-lssd,baseline,context_switch,3260.89,
-2026-05-27,gcp-c4-standard-8-lssd,baseline,ssd_read_seq,1052.39,7784182046
-2026-05-27,gcp-c4-standard-8-lssd,baseline,ssd_write_no_fsync,15222.36,538155768
-2026-05-27,gcp-c4-standard-8-lssd,baseline,ssd_write_fsync,154870.09,52895948
-2026-05-27,gcp-c4-standard-8-lssd,baseline,ssd_read_random,93215.28,87882588
-2026-05-27,gcp-c4-standard-8-lssd,baseline,tcp_echo,52574.16,623271913
-2026-05-27,gcp-c4-standard-8-lssd,baseline,sort_64bit,,710417318
-2026-05-27,gcp-c4-standard-8-lssd,baseline,compression,34742.71,30181179063
-2026-05-27,gcp-c4-standard-8-lssd,baseline,decompression,160922.25,6516041104
-2026-05-27,gcp-c4-standard-8-lssd,baseline,serialization_fast,44.06,3540400020
-2026-05-27,gcp-c4-standard-8-lssd,baseline,deserialization_fast,64.68,2411904780
-2026-05-27,gcp-c4-standard-8-lssd,baseline,serialization,481.65,296896086
-2026-05-27,gcp-c4-standard-8-lssd,baseline,deserialization,305.58,467956262
-2026-05-26,Prince.local,baseline,seq_mem_read_single,42297335.43,101542266256
-2026-05-26,Prince.local,baseline,seq_mem_read_threaded,18366658.88,233845868397
-2026-05-26,Prince.local,baseline,mem_random_rw,60861033.13,17642517202
-2026-05-26,Prince.local,baseline,hash_non_crypto,25.11,2548890897
-2026-05-26,Prince.local,baseline,hash_crypto,225.90,283313109
-2026-05-26,Prince.local,baseline,hash_siphash,18.72,3418362417
-2026-05-26,Prince.local,baseline,syscall,17.12,
-2026-05-26,Prince.local,baseline,context_switch,2365.08,
-2026-05-26,Prince.local,baseline,ssd_read_seq,705.02,11619508215
-2026-05-26,Prince.local,baseline,ssd_write_no_fsync,3695.69,2216639121
-2026-05-26,Prince.local,baseline,ssd_write_fsync,4126260.76,1985333
-2026-05-26,Prince.local,baseline,ssd_read_random,140856.80,58158357
-2026-05-26,Prince.local,baseline,tcp_echo,20816.08,1574167964
-2026-05-26,Prince.local,baseline,sort_64bit,,1137916844
-2026-05-26,Prince.local,baseline,compression,31483.15,33305937974
-2026-05-26,Prince.local,baseline,decompression,76313.55,13740364830
-2026-05-26,Prince.local,baseline,serialization_fast,31.62,4933577428
-2026-05-26,Prince.local,baseline,deserialization_fast,52.45,2974049433
-2026-05-26,Prince.local,baseline,serialization,325.69,439067893
-2026-05-26,Prince.local,baseline,deserialization,229.03,624368781
-2026-05-28,gcp-c4d-standard-8-lssd,baseline,seq_mem_read_single,86658367.64,49562060919
-2026-05-28,gcp-c4d-standard-8-lssd,baseline,seq_mem_read_threaded,86225069.05,49811120400
-2026-05-28,gcp-c4d-standard-8-lssd,baseline,mem_random_rw,159.88,400303580
-2026-05-28,gcp-c4d-standard-8-lssd,baseline,hash_non_crypto,34.41,1859719679
-2026-05-28,gcp-c4d-standard-8-lssd,baseline,hash_crypto,109.59,583992038
-2026-05-28,gcp-c4d-standard-8-lssd,baseline,hash_siphash,33.07,1935554564
-2026-05-28,gcp-c4d-standard-8-lssd,baseline,syscall,75.40,
-2026-05-28,gcp-c4d-standard-8-lssd,baseline,context_switch,2269.50,
-2026-05-28,gcp-c4d-standard-8-lssd,baseline,ssd_read_seq,505.62,16201788879
-2026-05-28,gcp-c4d-standard-8-lssd,baseline,ssd_write_no_fsync,20287.69,403791694
-2026-05-28,gcp-c4d-standard-8-lssd,baseline,ssd_write_fsync,92598.31,88468134
-2026-05-28,gcp-c4d-standard-8-lssd,baseline,ssd_read_random,78465.94,104401991
-2026-05-28,gcp-c4d-standard-8-lssd,baseline,tcp_echo,8446.75,3879361809
-2026-05-28,gcp-c4d-standard-8-lssd,baseline,sort_64bit,,739851221
-2026-05-28,gcp-c4d-standard-8-lssd,baseline,compression,32535.64,32228535847
-2026-05-28,gcp-c4d-standard-8-lssd,baseline,decompression,124327.03,8434014763
-2026-05-28,gcp-c4d-standard-8-lssd,baseline,serialization_fast,45.79,3406690620
-2026-05-28,gcp-c4d-standard-8-lssd,baseline,deserialization_fast,68.84,2266144435
-2026-05-28,gcp-c4d-standard-8-lssd,baseline,serialization,496.06,288273415
-2026-05-28,gcp-c4d-standard-8-lssd,baseline,deserialization,279.82,511051756
+date,machine,cpu,config,operation,latency_ns,throughput_bytes_s
+2026-05-26,apple-m4-pro,Apple M4 Pro,baseline,seq_mem_read_single,42297335.43,101542266256
+2026-05-26,apple-m4-pro,Apple M4 Pro,baseline,seq_mem_read_threaded,18366658.88,233845868397
+2026-05-26,apple-m4-pro,Apple M4 Pro,baseline,mem_random_rw,60861033.13,17642517202
+2026-05-26,apple-m4-pro,Apple M4 Pro,baseline,hash_non_crypto,25.11,2548890897
+2026-05-26,apple-m4-pro,Apple M4 Pro,baseline,hash_crypto,225.90,283313109
+2026-05-26,apple-m4-pro,Apple M4 Pro,baseline,hash_siphash,18.72,3418362417
+2026-05-26,apple-m4-pro,Apple M4 Pro,baseline,syscall,17.12,
+2026-05-26,apple-m4-pro,Apple M4 Pro,baseline,context_switch,2365.08,
+2026-05-26,apple-m4-pro,Apple M4 Pro,baseline,ssd_read_seq,705.02,11619508215
+2026-05-26,apple-m4-pro,Apple M4 Pro,baseline,ssd_write_no_fsync,3695.69,2216639121
+2026-05-26,apple-m4-pro,Apple M4 Pro,baseline,ssd_write_fsync,4126260.76,1985333
+2026-05-26,apple-m4-pro,Apple M4 Pro,baseline,ssd_read_random,140856.80,58158357
+2026-05-26,apple-m4-pro,Apple M4 Pro,baseline,tcp_echo,20816.08,1574167964
+2026-05-26,apple-m4-pro,Apple M4 Pro,baseline,sort_64bit,,1137916844
+2026-05-26,apple-m4-pro,Apple M4 Pro,baseline,compression,31483.15,33305937974
+2026-05-26,apple-m4-pro,Apple M4 Pro,baseline,decompression,76313.55,13740364830
+2026-05-26,apple-m4-pro,Apple M4 Pro,baseline,serialization_fast,31.62,4933577428
+2026-05-26,apple-m4-pro,Apple M4 Pro,baseline,deserialization_fast,52.45,2974049433
+2026-05-26,apple-m4-pro,Apple M4 Pro,baseline,serialization,325.69,439067893
+2026-05-26,apple-m4-pro,Apple M4 Pro,baseline,deserialization,229.03,624368781
+2026-05-27,gcp-c4-standard-8-lssd,Intel Xeon 6985P,baseline,seq_mem_read_single,31.06,2060260537
+2026-05-27,gcp-c4-standard-8-lssd,Intel Xeon 6985P,baseline,seq_mem_read_threaded,61168259.18,70215620869
+2026-05-27,gcp-c4-standard-8-lssd,Intel Xeon 6985P,baseline,mem_random_rw,217.59,294131632
+2026-05-27,gcp-c4-standard-8-lssd,Intel Xeon 6985P,baseline,hash_non_crypto,40.07,1597346343
+2026-05-27,gcp-c4-standard-8-lssd,Intel Xeon 6985P,baseline,hash_crypto,116.40,549831712
+2026-05-27,gcp-c4-standard-8-lssd,Intel Xeon 6985P,baseline,hash_siphash,39.98,1600982550
+2026-05-27,gcp-c4-standard-8-lssd,Intel Xeon 6985P,baseline,syscall,103.21,
+2026-05-27,gcp-c4-standard-8-lssd,Intel Xeon 6985P,baseline,context_switch,3260.89,
+2026-05-27,gcp-c4-standard-8-lssd,Intel Xeon 6985P,baseline,ssd_read_seq,1052.39,7784182046
+2026-05-27,gcp-c4-standard-8-lssd,Intel Xeon 6985P,baseline,ssd_write_no_fsync,15222.36,538155768
+2026-05-27,gcp-c4-standard-8-lssd,Intel Xeon 6985P,baseline,ssd_write_fsync,154870.09,52895948
+2026-05-27,gcp-c4-standard-8-lssd,Intel Xeon 6985P,baseline,ssd_read_random,93215.28,87882588
+2026-05-27,gcp-c4-standard-8-lssd,Intel Xeon 6985P,baseline,tcp_echo,52574.16,623271913
+2026-05-27,gcp-c4-standard-8-lssd,Intel Xeon 6985P,baseline,sort_64bit,,710417318
+2026-05-27,gcp-c4-standard-8-lssd,Intel Xeon 6985P,baseline,compression,34742.71,30181179063
+2026-05-27,gcp-c4-standard-8-lssd,Intel Xeon 6985P,baseline,decompression,160922.25,6516041104
+2026-05-27,gcp-c4-standard-8-lssd,Intel Xeon 6985P,baseline,serialization_fast,44.06,3540400020
+2026-05-27,gcp-c4-standard-8-lssd,Intel Xeon 6985P,baseline,deserialization_fast,64.68,2411904780
+2026-05-27,gcp-c4-standard-8-lssd,Intel Xeon 6985P,baseline,serialization,481.65,296896086
+2026-05-27,gcp-c4-standard-8-lssd,Intel Xeon 6985P,baseline,deserialization,305.58,467956262
+2026-05-28,gcp-c4d-standard-8-lssd,AMD EPYC 9B45,baseline,seq_mem_read_single,103228033.55,41606598017
+2026-05-28,gcp-c4d-standard-8-lssd,AMD EPYC 9B45,baseline,seq_mem_read_threaded,93561844.48,45905115700
+2026-05-28,gcp-c4d-standard-8-lssd,AMD EPYC 9B45,baseline,mem_random_rw,201.93,316936256
+2026-05-28,gcp-c4d-standard-8-lssd,AMD EPYC 9B45,baseline,hash_non_crypto,34.46,1857210805
+2026-05-28,gcp-c4d-standard-8-lssd,AMD EPYC 9B45,baseline,hash_crypto,111.76,572640356
+2026-05-28,gcp-c4d-standard-8-lssd,AMD EPYC 9B45,baseline,hash_siphash,34.17,1872914733
+2026-05-28,gcp-c4d-standard-8-lssd,AMD EPYC 9B45,baseline,syscall,80.43,
+2026-05-28,gcp-c4d-standard-8-lssd,AMD EPYC 9B45,baseline,context_switch,2423.32,
+2026-05-28,gcp-c4d-standard-8-lssd,AMD EPYC 9B45,baseline,ssd_read_seq,615.48,13309980400
+2026-05-28,gcp-c4d-standard-8-lssd,AMD EPYC 9B45,baseline,ssd_write_no_fsync,20395.91,401649251
+2026-05-28,gcp-c4d-standard-8-lssd,AMD EPYC 9B45,baseline,ssd_write_fsync,92720.91,88351157
+2026-05-28,gcp-c4d-standard-8-lssd,AMD EPYC 9B45,baseline,ssd_read_random,78583.46,104245851
+2026-05-28,gcp-c4d-standard-8-lssd,AMD EPYC 9B45,baseline,tcp_echo,9358.74,3501326542
+2026-05-28,gcp-c4d-standard-8-lssd,AMD EPYC 9B45,baseline,sort_64bit,,820253049
+2026-05-28,gcp-c4d-standard-8-lssd,AMD EPYC 9B45,baseline,compression,33362.54,31429737484
+2026-05-28,gcp-c4d-standard-8-lssd,AMD EPYC 9B45,baseline,decompression,127923.41,8196904482
+2026-05-28,gcp-c4d-standard-8-lssd,AMD EPYC 9B45,baseline,serialization_fast,45.35,3440137119
+2026-05-28,gcp-c4d-standard-8-lssd,AMD EPYC 9B45,baseline,deserialization_fast,72.01,2166364159
+2026-05-28,gcp-c4d-standard-8-lssd,AMD EPYC 9B45,baseline,serialization,535.73,266924688
+2026-05-28,gcp-c4d-standard-8-lssd,AMD EPYC 9B45,baseline,deserialization,307.69,464751715

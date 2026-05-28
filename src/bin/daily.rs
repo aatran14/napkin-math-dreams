@@ -93,7 +93,7 @@ fn today() -> String {
     let days = now / 86400;
     let y = 1970 + (days * 400 / 146097); // approximate, good enough
     // use chrono-free date formatting
-    let output = Command::new("date").arg("+%Y-%m-%d").output();
+    let output = Command::new("date").arg("+%Y-%m-%dT%H:%M:%S").output();
     match output {
         Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).trim().to_string(),
         _ => format!("{}", y),
@@ -110,19 +110,48 @@ fn hostname() -> String {
 }
 
 fn cpu_model() -> Option<String> {
+    // x86 Linux
     if let Ok(cpuinfo) = fs::read_to_string("/proc/cpuinfo") {
         for line in cpuinfo.lines() {
             if let Some(rest) = line.strip_prefix("model name") {
-                return rest.split_once(':').map(|(_, v)| v.trim().to_string());
+                return rest.split_once(':').map(|(_, v)| clean_cpu_name(v.trim()));
             }
         }
     }
+    // ARM Linux — lscpu has "Model name" on aarch64
+    if let Ok(output) = Command::new("lscpu").output() {
+        if output.status.success() {
+            let text = String::from_utf8_lossy(&output.stdout);
+            for line in text.lines() {
+                if let Some(rest) = line.strip_prefix("Model name:") {
+                    return Some(clean_cpu_name(rest.trim()));
+                }
+            }
+        }
+    }
+    // macOS
     Command::new("sysctl")
         .args(["-n", "machdep.cpu.brand_string"])
         .output()
         .ok()
         .filter(|o| o.status.success())
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .map(|o| clean_cpu_name(String::from_utf8_lossy(&o.stdout).trim()))
+}
+
+fn clean_cpu_name(raw: &str) -> String {
+    let s = raw
+        .replace("(R)", "")
+        .replace("(TM)", "")
+        .replace("(tm)", "")
+        .replace("CPU ", "")
+        .replace("Processor", "");
+    // collapse runs of whitespace and trim clock speed suffix like "@ 2.30GHz"
+    let s = s.split_whitespace().collect::<Vec<_>>().join(" ");
+    if let Some(i) = s.find(" @") {
+        s[..i].trim().to_string()
+    } else {
+        s.trim().to_string()
+    }
 }
 
 fn format_latency(ns: f64) -> String {

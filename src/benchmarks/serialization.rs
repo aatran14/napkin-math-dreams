@@ -18,7 +18,7 @@ fn make_record() -> Record {
     }
 }
 
-// Fast serialization (bincode).
+// Fast serialization (bincode)
 // Binary formats dump memory layout with minimal transformation.
 pub fn fast_serialize() -> Measurement {
     let record = make_record();
@@ -29,7 +29,7 @@ pub fn fast_serialize() -> Measurement {
     })
 }
 
-// Fast deserialization (bincode).
+// Fast deserialization (bincode)
 pub fn fast_deserialize() -> Measurement {
     let record = make_record();
     let encoded = bincode::serialize(&record).unwrap();
@@ -40,7 +40,7 @@ pub fn fast_deserialize() -> Measurement {
     })
 }
 
-// Serialization (JSON).
+// Serialization (JSON)
 // Text formats require parsing and string conversion, ~10x slower than binary.
 pub fn slow_serialize() -> Measurement {
     let record = make_record();
@@ -51,7 +51,7 @@ pub fn slow_serialize() -> Measurement {
     })
 }
 
-// Deserialization (JSON).
+// Deserialization (JSON)
 pub fn slow_deserialize() -> Measurement {
     let record = make_record();
     let encoded = serde_json::to_vec(&record).unwrap();
