@@ -1,4 +1,4 @@
-use crate::benchmarks::{Measurement};
+use crate::benchmarks::{black_box, Measurement};
 use std::time::{Duration, Instant};
 
 // Sort 1 MiB of random u64s.
@@ -21,6 +21,7 @@ pub fn sort_u64() -> Measurement {
     while t.elapsed() < duration {
         let mut v = original.clone();
         v.sort_unstable();
+        black_box(&v);
         iters += 1;
     }
     let elapsed = t.elapsed();

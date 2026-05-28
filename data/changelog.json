@@ -1,0 +1,26 @@
+[
+  {
+    "date": "2026-05-27",
+    "type": "fix",
+    "description": "Memory benchmark fix: seq_read_single and random_read timed one 64-byte element per bench iteration, measuring black_box + loop overhead instead of memory bandwidth. Fixed to sweep the full buffer per iteration.",
+    "affected": {
+      "operations": ["seq_mem_read_single", "mem_random_rw"],
+      "before": "2026-05-27"
+    }
+  },
+  {
+    "date": "2026-05-27",
+    "type": "add",
+    "description": "Added SipHash benchmark (hash_siphash)."
+  },
+  {
+    "date": "2026-05-27",
+    "type": "add",
+    "description": "Added cpu column to CSV schema."
+  },
+  {
+    "date": "2026-05-27",
+    "type": "add",
+    "description": "First GCP machine: c4-standard-8-lssd (Intel Xeon 6985P)."
+  }
+]

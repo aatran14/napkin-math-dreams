@@ -8,6 +8,7 @@ use std::time::SystemTime;
 fn main() {
     let machine = env::var("NAPKIN_MACHINE").unwrap_or_else(|_| hostname());
     let config = env::var("NAPKIN_CONFIG").unwrap_or_else(|_| "baseline".into());
+    let cpu = cpu_model().unwrap_or_default();
     let date = today();
     let csv_path = env::var("NAPKIN_CSV").unwrap_or_else(|_| "data/dead.csv".into());
 
@@ -72,13 +73,13 @@ fn main() {
         .expect("open csv");
 
     if needs_header {
-        writeln!(f, "date,machine,config,operation,latency_ns,throughput_bytes_s").unwrap();
+        writeln!(f, "date,machine,cpu,config,operation,latency_ns,throughput_bytes_s").unwrap();
     }
 
     for m in &results {
         let lat = m.latency_ns.map(|v| format!("{:.2}", v)).unwrap_or_default();
         let thr = m.throughput_bytes_s.map(|v| format!("{:.0}", v)).unwrap_or_default();
-        writeln!(f, "{},{},{},{},{},{}", date, machine, config, m.name, lat, thr).unwrap();
+        writeln!(f, "{},{},{},{},{},{},{}", date, machine, &cpu, config, m.name, lat, thr).unwrap();
     }
 
     eprintln!("wrote {} rows to {}", results.len(), csv_path);

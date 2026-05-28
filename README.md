@@ -33,6 +33,16 @@ kernel defaults, no tuning).
 
 Raw data: [data/dead.csv](data/dead.csv)
 
+## Roadmap
+
+Target machines — one per architecture per cloud.
+
+| Cloud | Intel | AMD | ARM |
+| ----- | ----- | --- | --- |
+| GCP   | [ ] C4  | [ ] C4D  | [ ] C4A  |
+| AWS   | [ ] C7i | [ ] C7a  | [ ] C8g  |
+| Azure | [ ] Dv6 | [ ] Dav6 | [ ] Dpv6 |
+
 ## Running
 
 ```
