@@ -19,7 +19,8 @@ fn main() {
     // Flush every cache line
     unsafe { flush_cache(&vec) };
 
-    let mut counter = Builder::new(Hardware::CACHE_MISSES)
+    let mut counter = Builder::new()
+        .kind(Hardware::CACHE_MISSES)
         .exclude_kernel(true)
         .exclude_hv(true)
         .build()
