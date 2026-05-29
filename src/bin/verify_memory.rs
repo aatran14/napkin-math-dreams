@@ -19,11 +19,11 @@ fn main() {
     // Flush every cache line
     unsafe { flush_cache(&vec) };
 
-    let mut counter = Builder::new()
-        .kind(Hardware::CACHE_MISSES)
-        .exclude_kernel(true)
-        .exclude_hv(true)
-        .build()
+    let mut builder = Builder::new();
+    builder.kind(Hardware::CACHE_MISSES);
+    builder.exclude_kernel(true);
+    builder.exclude_hv(true);
+    let mut counter = builder.build()
         .expect("failed to create perf counter — run: sudo sysctl -w kernel.perf_event_paranoid=-1");
 
     // Single pass with counter enabled
