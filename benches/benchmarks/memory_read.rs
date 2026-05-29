@@ -9,6 +9,36 @@ use std::time::Duration;
 
 type Int = u64;
 
+unsafe fn flush_cache(data: &[Int]) {
+    let ptr = data.as_ptr() as *const u8;
+    let len = data.len() * std::mem::size_of::<Int>();
+    let mut offset = 0usize;
+
+    while offset < len {
+        #[cfg(target_arch = "x86_64")]
+        asm!(
+            "clflushopt [{addr}]",
+            addr = in(reg) ptr.add(offset),
+            options(nostack, preserves_flags),
+        );
+
+        #[cfg(target_arch = "aarch64")]
+        std::arch::asm!(
+            "dc civac, {addr}",
+            addr = in(reg) ptr.add(offset),
+            options(nostack, preserves_flags),
+        );
+
+        offset += 64;
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    asm!("mfence", options(nostack, preserves_flags));
+
+    #[cfg(target_arch = "aarch64")]
+    std::arch::asm!("dsb sy", options(nostack, preserves_flags));
+}
+
 struct ThreadedMemoryReadBenchmark {
     start: Arc<Barrier>,
     end: Arc<Barrier>,
@@ -188,7 +218,8 @@ fn memory_read_benchmark(c: &mut Criterion) {
     let size_in_elements = size_bytes / bytes_per_iteration;
     let vec: Vec<Int> = (0..size_in_elements).map(|i| i as Int).collect();
 
-    // Keep all-core benchmarks on a single hardware thread per core after `./run` disables HT.
+    unsafe { flush_cache(&vec) };
+
     let core_ids = Arc::new(core_affinity::get_core_ids().unwrap());
     let threaded_non_vectorized = ThreadedMemoryReadBenchmark::new(
         core_ids.clone(),
