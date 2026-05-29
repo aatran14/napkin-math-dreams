@@ -5,8 +5,7 @@ Daily benchmark measurements on real hardware. Forked from
 
 ## Numbers
 
-Measured on Prince.local (Apple M4 Pro), May 25, 2026. Baseline config (stock
-kernel defaults, no tuning).
+Measured on Apple M4 Pro, May 25, 2026. Baseline config (stock kernel defaults, no tuning).
 
 | Operation                           | Latency     | Throughput | 1 MiB  | 1 GiB  |
 | ----------------------------------- | ----------- | ---------- | ------ | ------ |
