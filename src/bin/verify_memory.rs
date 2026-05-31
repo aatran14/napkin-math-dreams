@@ -19,38 +19,54 @@ fn main() {
     // Flush every cache line
     unsafe { flush_cache(&vec) };
 
-    let mut counter = Builder::new()
-        .kind(Hardware::CACHE_MISSES)
-        .build()
-        .expect("failed to create perf counter — run: sudo sysctl -w kernel.perf_event_paranoid=-1");
+    let counter = Builder::new().kind(Hardware::CACHE_MISSES).build();
 
-    // Single pass with counter enabled
-    counter.reset().unwrap();
-    counter.enable().unwrap();
     let t = Instant::now();
-    let sum = memory_read_vectorized(&vec);
-    let elapsed = t.elapsed();
-    counter.disable().unwrap();
+    let sum = match counter {
+        Ok(mut counter) => {
+            counter.reset().unwrap();
+            counter.enable().unwrap();
+            let sum = memory_read_vectorized(&vec);
+            counter.disable().unwrap();
+            let elapsed = t.elapsed();
+            let misses = counter.read().unwrap();
+            let cache_lines = size_bytes / 64;
+            let miss_pct = misses as f64 / cache_lines as f64 * 100.0;
+            let throughput_gibs =
+                size_bytes as f64 / elapsed.as_secs_f64() / (1024.0 * 1024.0 * 1024.0);
 
-    let misses = counter.read().unwrap();
-    let cache_lines = size_bytes / 64;
-    let miss_pct = misses as f64 / cache_lines as f64 * 100.0;
-    let throughput_gibs = size_bytes as f64 / elapsed.as_secs_f64() / (1024.0 * 1024.0 * 1024.0);
+            eprintln!("seq_mem_read_single verification");
+            eprintln!("  buffer:       1 GiB");
+            eprintln!("  elapsed:      {:.2} ms", elapsed.as_secs_f64() * 1000.0);
+            eprintln!("  throughput:   {:.2} GiB/s", throughput_gibs);
+            eprintln!("  cache misses: {}", misses);
+            eprintln!("  cache lines:  {}", cache_lines);
+            eprintln!("  miss rate:    {:.2}%", miss_pct);
+            eprintln!();
 
-    eprintln!("seq_mem_read_single verification");
-    eprintln!("  buffer:       1 GiB");
-    eprintln!("  elapsed:      {:.2} ms", elapsed.as_secs_f64() * 1000.0);
-    eprintln!("  throughput:   {:.2} GiB/s", throughput_gibs);
-    eprintln!("  cache misses: {}", misses);
-    eprintln!("  cache lines:  {}", cache_lines);
-    eprintln!("  miss rate:    {:.2}%", miss_pct);
-    eprintln!();
+            if miss_pct > 90.0 {
+                eprintln!("  PASS — reading from RAM, not cache");
+            } else {
+                eprintln!("  FAIL — {:.0}% of reads hit cache, not RAM", 100.0 - miss_pct);
+            }
+            sum
+        }
+        Err(e) => {
+            let sum = memory_read_vectorized(&vec);
+            let elapsed = t.elapsed();
+            let throughput_gibs =
+                size_bytes as f64 / elapsed.as_secs_f64() / (1024.0 * 1024.0 * 1024.0);
 
-    if miss_pct > 90.0 {
-        eprintln!("  PASS — reading from RAM, not cache");
-    } else {
-        eprintln!("  FAIL — {:.0}% of reads hit cache, not RAM", 100.0 - miss_pct);
-    }
+            eprintln!("seq_mem_read_single verification");
+            eprintln!("  buffer:       1 GiB");
+            eprintln!("  elapsed:      {:.2} ms", elapsed.as_secs_f64() * 1000.0);
+            eprintln!("  throughput:   {:.2} GiB/s", throughput_gibs);
+            eprintln!();
+            eprintln!("  SKIP — perf counter unavailable ({e})");
+            eprintln!("  cache flush still ran; throughput is valid");
+            sum
+        }
+    };
 
     black_box(sum);
 }

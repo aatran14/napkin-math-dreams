@@ -45,7 +45,8 @@ fetch("data/dead.csv", { cache: "no-store" })
     rows.forEach(function(row) {
       var key = row.machine + " | " + row.cpu;
       if (!byMachine[key]) byMachine[key] = { machine: row.machine, cpu: row.cpu, date: row.date, ops: {} };
-      if (!byMachine[key].ops[row.operation] || row.date > byMachine[key].date) {
+      var prev = byMachine[key].ops[row.operation];
+      if (!prev || row.date > prev.date) {
         byMachine[key].ops[row.operation] = row;
       }
       if (row.date > byMachine[key].date) byMachine[key].date = row.date;
