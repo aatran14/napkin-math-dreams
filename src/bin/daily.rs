@@ -1,4 +1,4 @@
-use napkin_math::benchmarks::{self, Measurement};
+use napkin_math::benchmarks;
 use std::env;
 use std::fs;
 use std::io::Write;
@@ -22,31 +22,8 @@ fn main() {
     }
     eprintln!();
 
-    let mut results: Vec<Measurement> = Vec::new();
-
-    eprintln!("running memory benchmarks...");
-    results.extend(benchmarks::memory::run());
-
-    eprintln!("running hash benchmarks...");
-    results.extend(benchmarks::hash::run());
-
-    eprintln!("running syscall benchmarks...");
-    results.extend(benchmarks::syscall::run());
-
-    eprintln!("running ssd benchmarks...");
-    results.extend(benchmarks::ssd::run());
-
-    eprintln!("running network benchmarks...");
-    results.extend(benchmarks::network::run());
-
-    eprintln!("running sort benchmarks...");
-    results.extend(benchmarks::sort::run());
-
-    eprintln!("running compression benchmarks...");
-    results.extend(benchmarks::compression::run());
-
-    eprintln!("running serialization benchmarks...");
-    results.extend(benchmarks::serialization::run());
+    eprintln!("running README table benchmarks...");
+    let results = benchmarks::readme::run();
 
     eprintln!();
     eprintln!("{} measurements collected", results.len());

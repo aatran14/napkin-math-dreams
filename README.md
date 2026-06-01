@@ -54,8 +54,28 @@ Target machines — one per architecture per cloud.
 
 ## Running
 
+Simon’s README table (run and print):
+
+```
+cargo run --release --bin readme
+```
+
+One row you’re working on (sequential memory read):
+
+```
+cargo run --release --bin memory
+```
+
+Daily run + append CSV:
+
 ```
 cargo run --release --bin daily
+```
+
+On a GCP VM from your Mac:
+
+```
+./run-on-vm.sh readme
 ```
 
 Set `NAPKIN_MACHINE` and `NAPKIN_CONFIG` env vars to label the run.

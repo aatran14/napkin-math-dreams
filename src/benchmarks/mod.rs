@@ -1,4 +1,5 @@
 pub mod memory;
+pub mod readme;
 pub mod hash;
 pub mod syscall;
 pub mod ssd;

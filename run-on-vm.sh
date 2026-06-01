@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Copy this repo to your GCP VM, install Rust if needed, run one binary.
 #
-#   ./run-on-vm.sh memory
+#   ./run-on-vm.sh readme     # full Simon README table
+#   ./run-on-vm.sh memory     # sequential memory read only
 #
 # Env: NAPKIN_VM=my-vm  NAPKIN_GCP_ZONE=us-central1-a
 
