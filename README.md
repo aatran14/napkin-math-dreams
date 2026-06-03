@@ -1,40 +1,32 @@
 # Napkin Math Dreams
 
 Daily benchmark measurements on real hardware. Forked from
-[sirupsen/napkin-math](https://github.com/sirupsen/napkin-math).
+[sirupsen/napkin-math](https://github.com/sirupsen/napkin-math). 
+
+The make the best use of this repo, it's reccomended you look at Simon's first. It's there where you will get a comprehensive introduction to the impetus of this dream scenario.
 
 ## Numbers
 
-Measured on Apple M4 Pro, May 25, 2026. Baseline config (stock kernel defaults, no tuning).
+Master raw data: [data/dead.csv](data/dead.csv)
 
-| Operation                           | Latency     | Throughput | 1 MiB  | 1 GiB  |
-| ----------------------------------- | ----------- | ---------- | ------ | ------ |
-| Sequential Memory R/W (64 bytes)    |             |            |        |        |
-| ├ Single Thread                     | 49 ns       | 1.2 GiB/s  | 800 μs | 800 ms |
-| ├ Threaded                          |             | 83 GiB/s   | 12 μs  | 12 ms  |
-| Hashing, non-crypto (64 bytes)      | 34 ns       | 1.7 GiB/s  | 600 μs | 600 ms |
-| Random Memory R/W (64 bytes)        | 55 ns       | 1.1 GiB/s  | 900 μs | 900 ms |
-| System Call                         | 18 ns       | N/A        | N/A    | N/A    |
-| Hashing, crypto-safe (64 bytes)     | 251 ns      | 243 MiB/s  | 4 ms   | 4s     |
-| Sequential SSD Read (8 KiB)         | 802 ns      | 9.5 GiB/s  | 100 μs | 100 ms |
-| Context Switch                      | 2.3 μs      | N/A        | N/A    | N/A    |
-| Sequential SSD Write, -fsync (8KiB) | 4.7 μs      | 1.6 GiB/s  | 600 μs | 600 ms |
-| TCP Echo Server (32 KiB)            | 23 μs       | 1.3 GiB/s  | 700 μs | 700 ms |
-| Random SSD Read (8 KiB)             | 158 μs      | 49 MiB/s   | 20 ms  | 20s    |
-| Sequential SSD Write, +fsync (8KiB) | 4.1 ms      | 1.9 MiB/s  | 500 ms | 500s   |
-| Fast Serialization (bincode)        | 33 ns       | 4.4 GiB/s  | 200 μs | 200 ms |
-| Fast Deserialization (bincode)      | 56 ns       | 2.6 GiB/s  | 400 μs | 400 ms |
-| Serialization (JSON)                | 389 ns      | 350 MiB/s  | 3 ms   | 3s     |
-| Deserialization (JSON)              | 230 ns      | 593 MiB/s  | 2 ms   | 2s     |
-| Sorting (64-bit integers)           | N/A         | 929 MiB/s  | 1 ms   | 1s     |
-| Compression (LZ4)                   | N/A         | 29 GiB/s   | 30 μs  | 30 ms  |
-| Decompression (LZ4)                 | N/A         | 11.8 GiB/s | 80 μs  | 80 ms  |
+## Goals
+[x] What we are optimizing for right now
+[] What we're definitely not optimizing for
 
-Raw data: [data/dead.csv](data/dead.csv)
+What we are optimizing for right now is writing code that we can "fire-and-forget". It is the nature of benchmarking that you can p9999 hack, but in the interest of simplicity, the goal of this project is to arrive there at steady state. 
+
+Optimize for simplicity on getting your first 9, then build the next method.
+
+What we are definitely not optimizing for is the UI. We keep it bare bones to reduce distractions. 
+
+What we are definitely not optimizing for is writing any comparative descriptions of these benchmarks. We aim to be faithful to the machines. In turn, we leave analyses up to humans. The crux of benchmarking is that it is often malpracticed. Prune bullshit wherever possible.
+
+The reason for these choices is that we get a more intimiate understanding of machines by working from naive understandings and making large improvements with first principles. Once the fleet arives to its p99, then the ball is in the course of the communtiy to keep hacking 9s. For now, we focus on one row of the benchmark at a time. This is the first deadlift.
+
 
 ## Roadmap
 
-Target machines — one per architecture per cloud.
+Target machines: one per architecture per cloud. Ideally is more transparent about their cores and specs, but currently focused on bolting them onto the fleet.
 
 | Cloud | Intel | AMD | ARM |
 | ----- | ----- | --- | --- |
@@ -42,43 +34,43 @@ Target machines — one per architecture per cloud.
 | AWS   | C7i | C7a  | C8g  |
 | Azure | Dv6 | Dav6 | Dpv6 |
 
-- [x] GCP C4 (Intel)
-- [x] GCP C4D (AMD)
-- [x] GCP C4A (ARM)
-- [ ] AWS C7i (Intel)
-- [ ] AWS C7a (AMD)
-- [ ] AWS C8g (ARM)
+- [x] GCP C4 (Intel) (24 cores)
+- [x] GCP C4D (AMD) (24 cores)
+- [x] GCP C4A (ARM) (24 cores)
+- [x] AWS C7i (Intel) (48 cores)
+- [x] AWS C7a (AMD)
+- [x] AWS C7g (ARM)
 - [ ] Azure Dv6 (Intel)
 - [ ] Azure Dav6 (AMD)
 - [ ] Azure Dpv6 (ARM)
 
 ## Running
 
-Simon’s README table (run and print):
+Run all benchmarks and print results to terminal:
 
 ```
 cargo run --release --bin readme
 ```
 
-One row you’re working on (sequential memory read):
+Run memory benchmarks:
 
 ```
 cargo run --release --bin memory
 ```
 
-Daily run + append CSV:
+Daily run (appends to `data/dead.csv`):
 
 ```
 cargo run --release --bin daily
 ```
 
-On a GCP VM from your Mac:
+Run on a cloud VM (requires `gcloud` or `aws` CLI authenticated):
 
 ```
-./run-on-vm.sh readme
+./machines/bench-gcp.sh c4-standard-8-lssd
+./machines/bench-aws.sh c7i.12xlarge
 ```
 
-Set `NAPKIN_MACHINE` and `NAPKIN_CONFIG` env vars to label the run.
-Results append to `data/dead.csv`.
+We use `NAPKIN_MACHINE` and `NAPKIN_CONFIG` to label runs in the CSV. For example, `NAPKIN_MACHINE=aws-c7i.12xlarge` tells the CSV that a run used that particular C7i architecture. Machines can also be tuned at the kernel differently. If you don't set `NAPKIN_CONFIG`, it defaults to `baseline`, which means it uses the stock kernel. We benchmark on various machines and to reduce surprises, we set the config to `NAPKIN_CONFIG=bench_stable` when we tune the kernel for stable measurements.
 
 For cloud VMs, see [machines/README.md](machines/README.md).

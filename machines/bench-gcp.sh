@@ -14,6 +14,7 @@ MACHINE_TYPE="${1:?Usage: bench-gcp.sh <machine-type>}"
 ZONE="${NAPKIN_GCP_ZONE:-us-east1-b}"
 NAME="bench-${MACHINE_TYPE%%-standard*}"
 REPO="aatran14/napkin-math-dreams"
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 # ARM instances need arm64 image
 if [[ "$MACHINE_TYPE" == *c4a* ]]; then
@@ -51,19 +52,16 @@ gcloud compute ssh "$NAME" --zone="$ZONE" --command="
   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 "
 
-echo ""
-echo "=== gh auth needed ==="
-echo "Run this in another terminal:"
-echo "  gcloud compute ssh $NAME --zone=$ZONE"
-echo "  gh auth login"
-echo ""
-read -p "Press Enter once gh auth is done on the VM..."
+echo "=== uploading repo ==="
+gcloud compute scp --recurse --zone="$ZONE" \
+  --compress "$REPO_DIR" "$NAME":~/napkin-math-dreams
 
-echo "=== cloning and building ==="
+echo "=== building ==="
 gcloud compute ssh "$NAME" --zone="$ZONE" --command="
   source ~/.cargo/env
-  gh repo clone $REPO
   cd napkin-math-dreams
+  rm -rf data target
+  mkdir -p data
   cargo build --release --bin daily
 "
 
@@ -90,12 +88,15 @@ gcloud compute ssh "$NAME" --zone="$ZONE" --command="
   else
     NAPKIN_BENCH_FILE=/tmp/napkin_daily.bin
   fi
-  NAPKIN_MACHINE=gcp-$MACHINE_TYPE NAPKIN_CONFIG=baseline NAPKIN_BENCH_FILE=\$NAPKIN_BENCH_FILE cargo run --release --bin daily
+  NAPKIN_MACHINE=gcp-$MACHINE_TYPE NAPKIN_CONFIG=bench_stable NAPKIN_BENCH_FILE=\$NAPKIN_BENCH_FILE cargo run --release --bin daily
 "
 
 echo "=== pulling results ==="
-gcloud compute scp "$NAME":~/napkin-math-dreams/data/dead.csv "./data/${NAME}.csv" --zone="$ZONE"
+gcloud compute scp "$NAME":~/napkin-math-dreams/data/dead.csv "/tmp/${NAME}.csv" --zone="$ZONE"
+
+tail -n +2 "/tmp/${NAME}.csv" >> "$REPO_DIR/data/dead.csv"
+rm -f "/tmp/${NAME}.csv"
 
 echo ""
-echo "=== done! results in data/${NAME}.csv ==="
+echo "=== $NAME done! results merged into data/dead.csv ==="
 # cleanup runs automatically via trap

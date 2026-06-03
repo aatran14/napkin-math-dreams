@@ -20,7 +20,7 @@ gcloud compute ssh napkin-bench --zone=us-central1-c
 sudo apt-get update && sudo apt-get install -y build-essential pkg-config libssl-dev
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source ~/.cargo/env
-git clone https://github.com/sirupsen/napkin-math && cd napkin-math
+git clone https://github.com/aatran14/napkin-math-dreams && cd napkin-math-dreams
 cargo build --release --bin daily
 
 # 4. tune
@@ -30,7 +30,7 @@ sudo ./tuning/bench_stable.sh
 NAPKIN_MACHINE=c4-standard-48-lssd NAPKIN_CONFIG=bench_stable cargo run --release --bin daily
 
 # 6. pull results (from your local machine)
-gcloud compute scp napkin-bench:~/napkin-math/data/dead.csv data/dead.csv --zone=us-central1-c
+gcloud compute scp napkin-bench:~/napkin-math-dreams/data/dead.csv data/dead.csv --zone=us-central1-c
 
 # 7. teardown
 sudo ./tuning/teardown.sh

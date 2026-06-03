@@ -15,6 +15,8 @@ pub fn sections() -> Vec<Section> {
             measurements: vec![
                 memory::seq_read_single(),
                 memory::seq_read_threaded(),
+                memory::seq_write_single(),
+                memory::seq_write_threaded(),
                 memory::random_read(),
             ],
         },

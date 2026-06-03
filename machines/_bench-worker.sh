@@ -46,10 +46,10 @@ gcloud compute ssh "$NAME" --zone="$ZONE" --command="
 "
 
 echo "uploading repo..."
-tar czf /tmp/${NAME}-repo.tar.gz -C "$REPO_DIR" --exclude=target --exclude=.git --exclude=SIMON.md .
+tar czf /tmp/${NAME}-repo.tar.gz -C "$REPO_DIR" --exclude=target --exclude=.git --exclude=SIMON.md --exclude=data .
 gcloud compute scp /tmp/${NAME}-repo.tar.gz "$NAME":~/repo.tar.gz --zone="$ZONE"
 rm -f /tmp/${NAME}-repo.tar.gz
-gcloud compute ssh "$NAME" --zone="$ZONE" --command="mkdir -p ~/napkin-math-dreams && tar xzf ~/repo.tar.gz -C ~/napkin-math-dreams"
+gcloud compute ssh "$NAME" --zone="$ZONE" --command="mkdir -p ~/napkin-math-dreams/data && tar xzf ~/repo.tar.gz -C ~/napkin-math-dreams"
 
 echo "building..."
 gcloud compute ssh "$NAME" --zone="$ZONE" --command="
@@ -84,7 +84,7 @@ gcloud compute ssh "$NAME" --zone="$ZONE" --command="
   else
     BENCH_FILE=/tmp/napkin_daily.bin
   fi
-  NAPKIN_MACHINE=gcp-$MACHINE_TYPE NAPKIN_CONFIG=baseline NAPKIN_BENCH_FILE=\$BENCH_FILE cargo run --release --bin daily
+  NAPKIN_MACHINE=gcp-$MACHINE_TYPE NAPKIN_CONFIG=bench_stable NAPKIN_BENCH_FILE=\$BENCH_FILE cargo run --release --bin daily
 "
 
 echo "pulling results..."
