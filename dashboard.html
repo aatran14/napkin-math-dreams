@@ -11,20 +11,113 @@
     th, td { border: 1px solid #ccc; padding: 6px 12px; text-align: left; }
     th { background: #f5f5f5; }
     td input { margin-right: 4px; }
+    .spark-cell { padding: 4px 8px; vertical-align: middle; }
+    .spark-mini { display: block; cursor: crosshair; }
+    #spark-popover {
+      position: fixed; z-index: 1000; pointer-events: none;
+      background: #fff; border: 1px solid #ccc; padding: 10px 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+      transform: scale(0.55); opacity: 0;
+      transition: transform 0.18s ease, opacity 0.15s ease;
+      transform-origin: top left;
+    }
+    #spark-popover.show { transform: scale(1); opacity: 1; }
+    #spark-popover .title { font-size: 13px; font-weight: 600; color: #111; margin-bottom: 8px; }
+    .machine-bar { margin: 16px 0 8px; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px 20px; }
+    #machine-meta { font-size: 12px; color: #666; padding-top: 8px; }
+    .machine-picker { position: relative; }
+    .picker-trigger {
+      display: flex; align-items: center; gap: 10px;
+      font-family: inherit; font-size: 14px; font-weight: 600;
+      padding: 10px 14px; border: 1px solid #ccc; background: #fff;
+      cursor: pointer; min-width: 280px; text-align: left;
+    }
+    .picker-trigger:hover { border-color: #999; }
+    .picker-icon { color: #111; font-size: 16px; line-height: 1; }
+    .picker-menu {
+      position: absolute; z-index: 100; top: 100%; left: 50%;
+      transform: translateX(-50%);
+      margin-top: 6px;
+      background: #fff; border: 1px solid #ccc;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+      padding: 16px 32px; min-width: 420px; width: max-content;
+    }
+    .picker-menu[hidden] { display: none; }
+    .picker-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(150px, 1fr));
+      column-gap: 72px;
+      row-gap: 6px;
+      width: 100%;
+    }
+    .picker-cell {
+      font-size: 14px; padding: 2px 0; border: none; background: none;
+      font-family: inherit; text-align: left; cursor: default;
+      color: #bbb;
+    }
+    .picker-cell.available { color: #888; cursor: pointer; }
+    .picker-cell.available:hover { color: #111; }
+    .picker-cell.active { color: #111; font-weight: 600; cursor: pointer; }
+    .picker-section { font-size: 11px; color: #999; margin: 12px 0 6px; }
+    .picker-section:first-child { margin-top: 0; }
+    .picker-list { display: flex; flex-direction: column; gap: 4px; }
+    .note { font-size: 12px; color: #666; max-width: 52em; line-height: 1.4; }
+    #bench-table .section-head td { background: #fafafa; font-weight: bold; }
+    .trend-cell { padding: 4px 8px; vertical-align: middle; }
+    .spark-mini, .pct-mini { display: block; cursor: crosshair; }
+    .pct-wrap { min-width: 100px; }
   </style>
 </head>
 <body>
   <h1>Napkin Math Dreams</h1>
+  <p>Napkin-math table · <a href="https://github.com/aatran14/napkin-math-dreams">github</a></p>
+  <p class="note"><strong>Trend:</strong> line = metric over daily runs (throughput or latency). <strong>p50 / p99</strong> bars = spread across runs (tail-sensitive rows: SSD +fsync, random I/O, syscalls) — stand-in until <code>latency</code> bin CSV exists. Empty trend = numbers only.</p>
 
   <h2>Roadmap</h2>
   <table>
     <tr><th></th><th>Intel</th><th>AMD</th><th>ARM</th></tr>
-    <tr><td>GCP</td><td><input type="checkbox" checked disabled> C4</td><td><input type="checkbox" disabled> C4D</td><td><input type="checkbox" disabled> C4A</td></tr>
-    <tr><td>AWS</td><td><input type="checkbox" disabled> C7i</td><td><input type="checkbox" disabled> C7a</td><td><input type="checkbox" disabled> C8g</td></tr>
+    <!-- Add/remove "checked" to update the roadmap -->
+    <tr><td>GCP</td><td><input type="checkbox" checked disabled> C4</td><td><input type="checkbox" checked disabled> C4D</td><td><input type="checkbox" checked disabled> C4A</td></tr>
+    <tr><td>AWS</td><td><input type="checkbox" checked disabled> C7i</td><td><input type="checkbox" checked disabled> C7a</td><td><input type="checkbox" checked disabled> C7g</td></tr>
     <tr><td>Azure</td><td><input type="checkbox" disabled> Dv6</td><td><input type="checkbox" disabled> Dav6</td><td><input type="checkbox" disabled> Dpv6</td></tr>
   </table>
 
-  <div id="charts"></div>
+  <div id="charts">
+    <div class="machine-bar">
+      <div class="machine-picker" id="machine-picker">
+        <button type="button" class="picker-trigger" id="picker-trigger" aria-haspopup="listbox" aria-expanded="false">
+          <span class="picker-icon" aria-hidden="true">☰</span>
+          <span class="picker-label" id="picker-label">Machine</span>
+        </button>
+        <div class="picker-menu" id="picker-menu" hidden>
+          <div class="picker-section" id="picker-gcp-heading">GCP</div>
+          <div id="picker-grid-gcp"></div>
+          <div class="picker-section" id="picker-aws-heading">AWS</div>
+          <div id="picker-grid-aws"></div>
+          <div class="picker-section" id="picker-other-heading" hidden>Other</div>
+          <div class="picker-list" id="picker-list-other"></div>
+        </div>
+      </div>
+      <span id="machine-meta"></span>
+    </div>
+    <table id="bench-table">
+      <thead>
+        <tr>
+          <th>Operation</th>
+          <th>Latency</th>
+          <th>Throughput</th>
+          <th>1 MiB</th>
+          <th>1 GiB</th>
+          <th>Trend</th>
+        </tr>
+      </thead>
+      <tbody id="bench-tbody"></tbody>
+    </table>
+  </div>
+  <div id="spark-popover" hidden>
+    <div class="title" id="spark-popover-title"></div>
+    <svg id="spark-popover-svg"></svg>
+  </div>
   <script src="dashboard.js"></script>
 </body>
 </html>

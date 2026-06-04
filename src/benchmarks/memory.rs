@@ -48,6 +48,10 @@ pub fn seq_read_threaded() -> Measurement {
     let core_ids = core_affinity::get_core_ids().unwrap_or_default();
     let num_threads = core_ids.len().max(1);
     let slice_size = n / num_threads;
+    // One 1 GiB buffer, split across cores (Simon-style). Flush the whole buffer on
+    // the main thread before each pass so workers only time the read, and we evict
+    // all lines — not just each core's ~128 MiB slice (which can stay in L3).
+    let shared = Arc::new((0..n).map(|i| i as Int).collect::<Vec<Int>>());
 
     let start_barrier = Arc::new(Barrier::new(num_threads + 1));
     let end_barrier = Arc::new(Barrier::new(num_threads + 1));
@@ -59,6 +63,7 @@ pub fn seq_read_threaded() -> Measurement {
         let end_b = end_barrier.clone();
         let done_alloc = done_allocating.clone();
         let done = done.clone();
+        let vec = shared.clone();
 
         thread::spawn(move || {
             core_affinity::set_for_current(core);
@@ -68,7 +73,6 @@ pub fn seq_read_threaded() -> Measurement {
             } else {
                 range_start + slice_size
             };
-            let vec: Vec<Int> = (range_start..range_end).map(|i| i as Int).collect();
 
             done_alloc.wait();
             loop {
@@ -76,8 +80,7 @@ pub fn seq_read_threaded() -> Measurement {
                 if done.load(Ordering::Relaxed) {
                     return;
                 }
-                unsafe { flush_cache(&vec) };
-                black_box(memory_read_vectorized(&vec));
+                black_box(memory_read_vectorized(&vec[range_start..range_end]));
                 end_b.wait();
             }
         });
@@ -89,6 +92,7 @@ pub fn seq_read_threaded() -> Measurement {
     let t = Instant::now();
     let mut iters: u64 = 0;
     while t.elapsed() < duration {
+        unsafe { flush_cache(shared.as_ref()) };
         start_barrier.wait();
         end_barrier.wait();
         iters += 1;
@@ -129,6 +133,7 @@ pub fn seq_write_threaded() -> Measurement {
     let core_ids = core_affinity::get_core_ids().unwrap_or_default();
     let num_threads = core_ids.len().max(1);
     let slice_size = n / num_threads;
+    let shared = Arc::new((0..n).map(|i| i as Int).collect::<Vec<Int>>());
 
     let start_barrier = Arc::new(Barrier::new(num_threads + 1));
     let end_barrier = Arc::new(Barrier::new(num_threads + 1));
@@ -140,6 +145,7 @@ pub fn seq_write_threaded() -> Measurement {
         let end_b = end_barrier.clone();
         let done_alloc = done_allocating.clone();
         let done = done.clone();
+        let vec = shared.clone();
 
         thread::spawn(move || {
             core_affinity::set_for_current(core);
@@ -149,7 +155,6 @@ pub fn seq_write_threaded() -> Measurement {
             } else {
                 range_start + slice_size
             };
-            let mut vec: Vec<Int> = (range_start..range_end).map(|i| i as Int).collect();
 
             done_alloc.wait();
             loop {
@@ -157,9 +162,15 @@ pub fn seq_write_threaded() -> Measurement {
                 if done.load(Ordering::Relaxed) {
                     return;
                 }
-                unsafe { flush_cache(&vec) };
-                memory_write_vectorized(&mut vec);
-                black_box(vec[0]);
+                // SAFETY: each thread writes a disjoint sub-slice of the shared vec.
+                let slice = unsafe {
+                    std::slice::from_raw_parts_mut(
+                        vec.as_ptr().add(range_start) as *mut Int,
+                        range_end - range_start,
+                    )
+                };
+                memory_write_vectorized(slice);
+                black_box(slice[0]);
                 end_b.wait();
             }
         });
@@ -171,6 +182,7 @@ pub fn seq_write_threaded() -> Measurement {
     let t = Instant::now();
     let mut iters: u64 = 0;
     while t.elapsed() < duration {
+        unsafe { flush_cache(shared.as_ref()) };
         start_barrier.wait();
         end_barrier.wait();
         iters += 1;

@@ -2,9 +2,9 @@
 # Provision a GCP instance, run benchmarks, pull results, and tear down.
 #
 # Usage:
-#   ./machines/bench-gcp.sh c4d-standard-8-lssd        # AMD
-#   ./machines/bench-gcp.sh c4a-standard-8-lssd        # ARM
-#   ./machines/bench-gcp.sh c4-standard-8-lssd         # Intel
+#   ./machines/bench-gcp.sh c4d-standard-16-lssd       # AMD, 16 vCPU
+#   ./machines/bench-gcp.sh c4a-standard-16-lssd       # ARM, 16 vCPU
+#   ./machines/bench-gcp.sh c4-standard-16-lssd        # Intel, 16 vCPU
 #
 # Requires: gcloud CLI authenticated, gh CLI authenticated on the VM
 # (gh auth login runs interactively — you'll need to complete the device flow)

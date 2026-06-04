@@ -2,9 +2,9 @@
 # Provision an AWS EC2 instance, run benchmarks, pull results, and tear down.
 #
 # Usage:
-#   ./machines/bench-aws.sh c7i.12xlarge       # Intel Sapphire Rapids, 48 vCPU
-#   ./machines/bench-aws.sh c7a.12xlarge       # AMD Genoa, 48 vCPU
-#   ./machines/bench-aws.sh c7g.12xlarge       # Graviton3 ARM, 48 vCPU
+#   ./machines/bench-aws.sh c7i.4xlarge        # Intel, 16 vCPU
+#   ./machines/bench-aws.sh c7a.4xlarge        # AMD, 16 vCPU
+#   ./machines/bench-aws.sh c7g.4xlarge        # Graviton3 ARM, 16 vCPU
 #
 # Requires: aws CLI configured, aws-setup.sh already run
 set -euo pipefail
