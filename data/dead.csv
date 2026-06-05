@@ -731,3 +731,129 @@ date,machine,cpu,config,operation,latency_ns,throughput_bytes_s
 2026-06-04T06:55:17,gcp-c4a-standard-16-lssd,Neoverse-V2,bench_stable,ssd_write_fsync,96965.74,84483451
 2026-06-04T06:55:17,gcp-c4a-standard-16-lssd,Neoverse-V2,bench_stable,ssd_read_random,77171.25,106153528
 2026-06-04T06:55:17,gcp-c4a-standard-16-lssd,Neoverse-V2,bench_stable,tcp_echo,17132.58,1912612804
+2026-06-05T04:15:22,gcp-c4-standard-16-lssd,Intel Xeon 6985P-C,bench_stable,seq_mem_read_single,53522032.20,20061678898
+2026-06-05T04:15:22,gcp-c4-standard-16-lssd,Intel Xeon 6985P-C,bench_stable,seq_mem_read_threaded,46213198.29,23234527443
+2026-06-05T04:15:22,gcp-c4-standard-16-lssd,Intel Xeon 6985P-C,bench_stable,seq_mem_write_single,96962454.59,11073789628
+2026-06-05T04:15:22,gcp-c4-standard-16-lssd,Intel Xeon 6985P-C,bench_stable,seq_mem_write_threaded,55601933.52,19311231750
+2026-06-05T04:15:22,gcp-c4-standard-16-lssd,Intel Xeon 6985P-C,bench_stable,mem_random_rw,199.56,320704003
+2026-06-05T04:15:22,gcp-c4-standard-16-lssd,Intel Xeon 6985P-C,bench_stable,syscall,103.47,
+2026-06-05T04:15:22,gcp-c4-standard-16-lssd,Intel Xeon 6985P-C,bench_stable,context_switch,3535.55,
+2026-06-05T04:15:22,gcp-c4-standard-16-lssd,Intel Xeon 6985P-C,bench_stable,hash_non_crypto,39.99,1600339363
+2026-06-05T04:15:22,gcp-c4-standard-16-lssd,Intel Xeon 6985P-C,bench_stable,hash_crypto,122.45,522658703
+2026-06-05T04:15:22,gcp-c4-standard-16-lssd,Intel Xeon 6985P-C,bench_stable,sort_64bit,,704934668
+2026-06-05T04:15:22,gcp-c4-standard-16-lssd,Intel Xeon 6985P-C,bench_stable,compression,35417.88,29605835048
+2026-06-05T04:15:22,gcp-c4-standard-16-lssd,Intel Xeon 6985P-C,bench_stable,decompression,398013.34,2634524744
+2026-06-05T04:15:22,gcp-c4-standard-16-lssd,Intel Xeon 6985P-C,bench_stable,serialization_fast,46.91,3325848044
+2026-06-05T04:15:22,gcp-c4-standard-16-lssd,Intel Xeon 6985P-C,bench_stable,deserialization_fast,71.01,2196777586
+2026-06-05T04:15:22,gcp-c4-standard-16-lssd,Intel Xeon 6985P-C,bench_stable,serialization,480.32,297720001
+2026-06-05T04:15:22,gcp-c4-standard-16-lssd,Intel Xeon 6985P-C,bench_stable,deserialization,307.06,465705897
+2026-06-05T04:15:22,gcp-c4-standard-16-lssd,Intel Xeon 6985P-C,bench_stable,ssd_read_seq,1038.19,7890634991
+2026-06-05T04:15:22,gcp-c4-standard-16-lssd,Intel Xeon 6985P-C,bench_stable,ssd_write_no_fsync,5620.12,1457620560
+2026-06-05T04:15:22,gcp-c4-standard-16-lssd,Intel Xeon 6985P-C,bench_stable,ssd_write_fsync,163113.31,50222755
+2026-06-05T04:15:22,gcp-c4-standard-16-lssd,Intel Xeon 6985P-C,bench_stable,ssd_read_random,92248.46,88803655
+2026-06-05T04:15:22,gcp-c4-standard-16-lssd,Intel Xeon 6985P-C,bench_stable,tcp_echo,52699.33,621791619
+2026-06-05T04:14:54,aws-c7i.4xlarge,Intel Xeon Platinum 8488C,bench_stable,seq_mem_read_single,96227235.90,11158398284
+2026-06-05T04:14:54,aws-c7i.4xlarge,Intel Xeon Platinum 8488C,bench_stable,seq_mem_read_threaded,54343915.13,19758271399
+2026-06-05T04:14:54,aws-c7i.4xlarge,Intel Xeon Platinum 8488C,bench_stable,seq_mem_write_single,92184801.34,11647709909
+2026-06-05T04:14:54,aws-c7i.4xlarge,Intel Xeon Platinum 8488C,bench_stable,seq_mem_write_threaded,58519090.97,18348573195
+2026-06-05T04:14:54,aws-c7i.4xlarge,Intel Xeon Platinum 8488C,bench_stable,mem_random_rw,226.89,282078209
+2026-06-05T04:14:54,aws-c7i.4xlarge,Intel Xeon Platinum 8488C,bench_stable,syscall,137.49,
+2026-06-05T04:14:54,aws-c7i.4xlarge,Intel Xeon Platinum 8488C,bench_stable,context_switch,3899.47,
+2026-06-05T04:14:54,aws-c7i.4xlarge,Intel Xeon Platinum 8488C,bench_stable,hash_non_crypto,51.42,1244577653
+2026-06-05T04:14:54,aws-c7i.4xlarge,Intel Xeon Platinum 8488C,bench_stable,hash_crypto,159.80,400494149
+2026-06-05T04:14:54,aws-c7i.4xlarge,Intel Xeon Platinum 8488C,bench_stable,sort_64bit,,539444909
+2026-06-05T04:14:54,aws-c7i.4xlarge,Intel Xeon Platinum 8488C,bench_stable,compression,83205.71,12602212134
+2026-06-05T04:14:54,aws-c7i.4xlarge,Intel Xeon Platinum 8488C,bench_stable,decompression,603352.45,1737916191
+2026-06-05T04:14:54,aws-c7i.4xlarge,Intel Xeon Platinum 8488C,bench_stable,serialization_fast,69.88,2232241936
+2026-06-05T04:14:54,aws-c7i.4xlarge,Intel Xeon Platinum 8488C,bench_stable,deserialization_fast,102.70,1519034685
+2026-06-05T04:14:54,aws-c7i.4xlarge,Intel Xeon Platinum 8488C,bench_stable,serialization,645.88,221404881
+2026-06-05T04:14:54,aws-c7i.4xlarge,Intel Xeon Platinum 8488C,bench_stable,deserialization,405.05,353045101
+2026-06-05T04:14:54,aws-c7i.4xlarge,Intel Xeon Platinum 8488C,bench_stable,ssd_read_seq,62465.55,131144280
+2026-06-05T04:14:54,aws-c7i.4xlarge,Intel Xeon Platinum 8488C,bench_stable,ssd_write_no_fsync,15440.98,530536308
+2026-06-05T04:14:54,aws-c7i.4xlarge,Intel Xeon Platinum 8488C,bench_stable,ssd_write_fsync,2787929.79,2938381
+2026-06-05T04:14:54,aws-c7i.4xlarge,Intel Xeon Platinum 8488C,bench_stable,ssd_read_random,541012.60,15141976
+2026-06-05T04:14:54,aws-c7i.4xlarge,Intel Xeon Platinum 8488C,bench_stable,tcp_echo,45402.78,721717927
+2026-06-05T04:20:06,aws-c7a.4xlarge,AMD EPYC 9R14,bench_stable,seq_mem_read_single,28935860.33,37107651598
+2026-06-05T04:20:06,aws-c7a.4xlarge,AMD EPYC 9R14,bench_stable,seq_mem_read_threaded,25381118.18,42304748616
+2026-06-05T04:20:06,aws-c7a.4xlarge,AMD EPYC 9R14,bench_stable,seq_mem_write_single,38645751.16,27784214094
+2026-06-05T04:20:06,aws-c7a.4xlarge,AMD EPYC 9R14,bench_stable,seq_mem_write_threaded,30643326.10,35039989470
+2026-06-05T04:20:06,aws-c7a.4xlarge,AMD EPYC 9R14,bench_stable,mem_random_rw,167.87,381239779
+2026-06-05T04:20:06,aws-c7a.4xlarge,AMD EPYC 9R14,bench_stable,syscall,440.15,
+2026-06-05T04:20:06,aws-c7a.4xlarge,AMD EPYC 9R14,bench_stable,context_switch,4801.41,
+2026-06-05T04:20:06,aws-c7a.4xlarge,AMD EPYC 9R14,bench_stable,hash_non_crypto,42.63,1501181171
+2026-06-05T04:20:06,aws-c7a.4xlarge,AMD EPYC 9R14,bench_stable,hash_crypto,140.41,455818768
+2026-06-05T04:20:06,aws-c7a.4xlarge,AMD EPYC 9R14,bench_stable,sort_64bit,,662568243
+2026-06-05T04:20:06,aws-c7a.4xlarge,AMD EPYC 9R14,bench_stable,compression,36667.97,28596513635
+2026-06-05T04:20:06,aws-c7a.4xlarge,AMD EPYC 9R14,bench_stable,decompression,508028.83,2064008848
+2026-06-05T04:20:06,aws-c7a.4xlarge,AMD EPYC 9R14,bench_stable,serialization_fast,62.79,2484560559
+2026-06-05T04:20:06,aws-c7a.4xlarge,AMD EPYC 9R14,bench_stable,deserialization_fast,83.63,1865344317
+2026-06-05T04:20:06,aws-c7a.4xlarge,AMD EPYC 9R14,bench_stable,serialization,630.32,226869061
+2026-06-05T04:20:06,aws-c7a.4xlarge,AMD EPYC 9R14,bench_stable,deserialization,365.88,390835501
+2026-06-05T04:20:06,aws-c7a.4xlarge,AMD EPYC 9R14,bench_stable,ssd_read_seq,62464.76,131145949
+2026-06-05T04:20:06,aws-c7a.4xlarge,AMD EPYC 9R14,bench_stable,ssd_write_no_fsync,10755.63,761647600
+2026-06-05T04:20:06,aws-c7a.4xlarge,AMD EPYC 9R14,bench_stable,ssd_write_fsync,2824804.39,2900024
+2026-06-05T04:20:06,aws-c7a.4xlarge,AMD EPYC 9R14,bench_stable,ssd_read_random,562001.95,14576462
+2026-06-05T04:20:06,aws-c7a.4xlarge,AMD EPYC 9R14,bench_stable,tcp_echo,25628.22,1278590702
+2026-06-05T04:21:07,gcp-c4d-standard-16-lssd,AMD EPYC 9B45,bench_stable,seq_mem_read_single,23526006.83,45640632158
+2026-06-05T04:21:07,gcp-c4d-standard-16-lssd,AMD EPYC 9B45,bench_stable,seq_mem_read_threaded,32758651.56,32777351112
+2026-06-05T04:21:07,gcp-c4d-standard-16-lssd,AMD EPYC 9B45,bench_stable,seq_mem_write_single,35090926.51,30598845083
+2026-06-05T04:21:07,gcp-c4d-standard-16-lssd,AMD EPYC 9B45,bench_stable,seq_mem_write_threaded,43115663.59,24903752713
+2026-06-05T04:21:07,gcp-c4d-standard-16-lssd,AMD EPYC 9B45,bench_stable,mem_random_rw,161.94,395201242
+2026-06-05T04:21:07,gcp-c4d-standard-16-lssd,AMD EPYC 9B45,bench_stable,syscall,76.30,
+2026-06-05T04:21:07,gcp-c4d-standard-16-lssd,AMD EPYC 9B45,bench_stable,context_switch,2286.33,
+2026-06-05T04:21:07,gcp-c4d-standard-16-lssd,AMD EPYC 9B45,bench_stable,hash_non_crypto,31.77,2014370632
+2026-06-05T04:21:07,gcp-c4d-standard-16-lssd,AMD EPYC 9B45,bench_stable,hash_crypto,117.61,544187317
+2026-06-05T04:21:07,gcp-c4d-standard-16-lssd,AMD EPYC 9B45,bench_stable,sort_64bit,,846992708
+2026-06-05T04:21:07,gcp-c4d-standard-16-lssd,AMD EPYC 9B45,bench_stable,compression,32598.18,32166704808
+2026-06-05T04:21:07,gcp-c4d-standard-16-lssd,AMD EPYC 9B45,bench_stable,decompression,314891.57,3329958898
+2026-06-05T04:21:07,gcp-c4d-standard-16-lssd,AMD EPYC 9B45,bench_stable,serialization_fast,46.09,3384845730
+2026-06-05T04:21:07,gcp-c4d-standard-16-lssd,AMD EPYC 9B45,bench_stable,deserialization_fast,70.30,2218998424
+2026-06-05T04:21:07,gcp-c4d-standard-16-lssd,AMD EPYC 9B45,bench_stable,serialization,517.32,276421982
+2026-06-05T04:21:07,gcp-c4d-standard-16-lssd,AMD EPYC 9B45,bench_stable,deserialization,295.41,484077677
+2026-06-05T04:21:07,gcp-c4d-standard-16-lssd,AMD EPYC 9B45,bench_stable,ssd_read_seq,570.67,14355025683
+2026-06-05T04:21:07,gcp-c4d-standard-16-lssd,AMD EPYC 9B45,bench_stable,ssd_write_no_fsync,7094.73,1154660056
+2026-06-05T04:21:07,gcp-c4d-standard-16-lssd,AMD EPYC 9B45,bench_stable,ssd_write_fsync,93289.23,87812927
+2026-06-05T04:21:07,gcp-c4d-standard-16-lssd,AMD EPYC 9B45,bench_stable,ssd_read_random,78053.29,104953940
+2026-06-05T04:21:07,gcp-c4d-standard-16-lssd,AMD EPYC 9B45,bench_stable,tcp_echo,9042.57,3623747530
+2026-06-05T04:25:24,aws-c7g.4xlarge,Neoverse-V1,bench_stable,seq_mem_read_single,33325406.68,32219916606
+2026-06-05T04:25:24,aws-c7g.4xlarge,Neoverse-V1,bench_stable,seq_mem_read_threaded,14298796.15,75093162588
+2026-06-05T04:25:24,aws-c7g.4xlarge,Neoverse-V1,bench_stable,seq_mem_write_single,40895200.34,26255937494
+2026-06-05T04:25:24,aws-c7g.4xlarge,Neoverse-V1,bench_stable,seq_mem_write_threaded,17879020.46,60055964837
+2026-06-05T04:25:24,aws-c7g.4xlarge,Neoverse-V1,bench_stable,mem_random_rw,159.68,400808185
+2026-06-05T04:25:24,aws-c7g.4xlarge,Neoverse-V1,bench_stable,syscall,286.93,
+2026-06-05T04:25:24,aws-c7g.4xlarge,Neoverse-V1,bench_stable,context_switch,4378.36,
+2026-06-05T04:25:24,aws-c7g.4xlarge,Neoverse-V1,bench_stable,hash_non_crypto,61.61,1038748020
+2026-06-05T04:25:24,aws-c7g.4xlarge,Neoverse-V1,bench_stable,hash_crypto,487.37,131317658
+2026-06-05T04:25:24,aws-c7g.4xlarge,Neoverse-V1,bench_stable,sort_64bit,,500071046
+2026-06-05T04:25:24,aws-c7g.4xlarge,Neoverse-V1,bench_stable,compression,52368.55,20023009545
+2026-06-05T04:25:24,aws-c7g.4xlarge,Neoverse-V1,bench_stable,decompression,845467.55,1240232110
+2026-06-05T04:25:24,aws-c7g.4xlarge,Neoverse-V1,bench_stable,serialization_fast,76.93,2027789915
+2026-06-05T04:25:24,aws-c7g.4xlarge,Neoverse-V1,bench_stable,deserialization_fast,112.26,1389586020
+2026-06-05T04:25:24,aws-c7g.4xlarge,Neoverse-V1,bench_stable,serialization,831.53,171972298
+2026-06-05T04:25:24,aws-c7g.4xlarge,Neoverse-V1,bench_stable,deserialization,539.65,264988854
+2026-06-05T04:25:24,aws-c7g.4xlarge,Neoverse-V1,bench_stable,ssd_read_seq,62465.72,131143920
+2026-06-05T04:25:24,aws-c7g.4xlarge,Neoverse-V1,bench_stable,ssd_write_no_fsync,14973.47,547100979
+2026-06-05T04:25:24,aws-c7g.4xlarge,Neoverse-V1,bench_stable,ssd_write_fsync,2781018.86,2945683
+2026-06-05T04:25:24,aws-c7g.4xlarge,Neoverse-V1,bench_stable,ssd_read_random,520664.97,15733726
+2026-06-05T04:25:24,aws-c7g.4xlarge,Neoverse-V1,bench_stable,tcp_echo,19946.89,1642762337
+2026-06-05T04:26:51,gcp-c4a-standard-16-lssd,Neoverse-V2,bench_stable,seq_mem_read_single,38990938.47,27538240068
+2026-06-05T04:26:51,gcp-c4a-standard-16-lssd,Neoverse-V2,bench_stable,seq_mem_read_threaded,11157438.91,96235510059
+2026-06-05T04:26:51,gcp-c4a-standard-16-lssd,Neoverse-V2,bench_stable,seq_mem_write_single,42982505.09,24980903782
+2026-06-05T04:26:51,gcp-c4a-standard-16-lssd,Neoverse-V2,bench_stable,seq_mem_write_threaded,14689027.65,73098223358
+2026-06-05T04:26:51,gcp-c4a-standard-16-lssd,Neoverse-V2,bench_stable,mem_random_rw,156.60,408676591
+2026-06-05T04:26:51,gcp-c4a-standard-16-lssd,Neoverse-V2,bench_stable,syscall,226.46,
+2026-06-05T04:26:51,gcp-c4a-standard-16-lssd,Neoverse-V2,bench_stable,context_switch,3332.89,
+2026-06-05T04:26:51,gcp-c4a-standard-16-lssd,Neoverse-V2,bench_stable,hash_non_crypto,57.28,1117265474
+2026-06-05T04:26:51,gcp-c4a-standard-16-lssd,Neoverse-V2,bench_stable,hash_crypto,406.95,157266755
+2026-06-05T04:26:51,gcp-c4a-standard-16-lssd,Neoverse-V2,bench_stable,sort_64bit,,614814901
+2026-06-05T04:26:51,gcp-c4a-standard-16-lssd,Neoverse-V2,bench_stable,compression,48090.36,21804284965
+2026-06-05T04:26:51,gcp-c4a-standard-16-lssd,Neoverse-V2,bench_stable,decompression,622703.18,1683909812
+2026-06-05T04:26:51,gcp-c4a-standard-16-lssd,Neoverse-V2,bench_stable,serialization_fast,68.03,2293027739
+2026-06-05T04:26:51,gcp-c4a-standard-16-lssd,Neoverse-V2,bench_stable,deserialization_fast,94.51,1650565815
+2026-06-05T04:26:51,gcp-c4a-standard-16-lssd,Neoverse-V2,bench_stable,serialization,594.33,240608107
+2026-06-05T04:26:51,gcp-c4a-standard-16-lssd,Neoverse-V2,bench_stable,deserialization,362.56,394412048
+2026-06-05T04:26:51,gcp-c4a-standard-16-lssd,Neoverse-V2,bench_stable,ssd_read_seq,857.53,9552995379
+2026-06-05T04:26:51,gcp-c4a-standard-16-lssd,Neoverse-V2,bench_stable,ssd_write_no_fsync,5234.15,1565104700
+2026-06-05T04:26:51,gcp-c4a-standard-16-lssd,Neoverse-V2,bench_stable,ssd_write_fsync,93567.77,87551517
+2026-06-05T04:26:51,gcp-c4a-standard-16-lssd,Neoverse-V2,bench_stable,ssd_read_random,75414.27,108626658
+2026-06-05T04:26:51,gcp-c4a-standard-16-lssd,Neoverse-V2,bench_stable,tcp_echo,17319.47,1891975277
