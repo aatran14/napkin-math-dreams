@@ -2,7 +2,7 @@
 use napkin_math::benchmarks::memory;
 
 fn main() {
-    eprintln!("sequential memory — flush cache before each pass\n");
+    eprintln!("sequential memory — warm streaming bandwidth\n");
 
     for m in [
         memory::seq_read_single(),

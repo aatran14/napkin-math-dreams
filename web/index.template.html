@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Napkin Math Dreams</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- INJECT_DATA -->
+</head>
+<body>
+  <h1>Napkin Math Dreams</h1>
+  <p>Napkin-math table · <a href="https://github.com/aatran14/napkin-math-dreams">github</a></p>
+
+  <div id="charts">
+    <div class="machine-bar">
+      <div class="machine-picker" id="machine-picker">
+        <div class="picker-trigger" id="picker-trigger">
+          <button type="button" class="picker-icon" id="picker-toggle" aria-expanded="false" aria-controls="picker-menu">☰</button>
+          <span class="picker-label" id="picker-label">Machine</span>
+        </div>
+        <div class="picker-menu" id="picker-menu">
+          <div class="picker-section" id="picker-gcp-heading">GCP</div>
+          <div id="picker-grid-gcp"></div>
+          <div class="picker-section" id="picker-aws-heading">AWS</div>
+          <div id="picker-grid-aws"></div>
+          <div class="picker-section" id="picker-other-heading" hidden>Other</div>
+          <div class="picker-list" id="picker-list-other"></div>
+        </div>
+      </div>
+      <span id="machine-meta"></span>
+    </div>
+    <table id="bench-table">
+      <thead>
+        <tr>
+          <th>Operation</th>
+          <th>Latency</th>
+          <th>Throughput</th>
+          <th>1 MiB</th>
+          <th>1 GiB</th>
+          <th>Trend</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <div id="changelog" hidden></div>
+  <div id="spark-popover" hidden>
+    <div class="title" id="spark-popover-title"></div>
+    <div id="spark-popover-body"></div>
+  </div>
+  <div id="spark-popover-2" hidden>
+    <div class="title" id="spark-popover-title-2"></div>
+    <div id="spark-popover-body-2"></div>
+  </div>
+  <script src="js/dashboard.js?v=23"></script>
+</body>
+</html>

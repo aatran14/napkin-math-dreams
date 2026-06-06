@@ -10,37 +10,16 @@ type Int = u64;
 
 const BUFFER_BYTES: usize = 1024 * 1024 * 1024;
 
-/*
-We aim to measure DRAM bandwidth. To do this we must 
-- measure the time it takes to read
-- measure the time it takes to write
-
-the standard convention is that these operations are the same.
-Even sirupsen/napkin-math measures only the read path, but for 
-but for even more transparency, memory.rs perform both R/W throughput
-
-R/W is difficult to isolate on memory because of the cache layer.
-This demands a method to either exhaust the cache 
-
-
-*/
-// Sequential read/write: separate experiments. Each timed sample flushes cache,
-// then measures only the pass time (read or write), so throughput ≈ DRAM ceiling.
+// Sequential read/write: warm streaming bandwidth (sirupsen/napkin-math style).
+// Each core reads/writes its own slice with affinity pinned; timed passes do not
+// flush cache, so throughput reflects what the machine can sustain from memory.
 
 pub fn seq_read_single() -> Measurement {
     let n = BUFFER_BYTES / 8;
     let vec: Vec<Int> = (0..n).map(|i| i as Int).collect();
-    let (ns_per_pass, throughput) = measure_cold_passes(BUFFER_BYTES, 10, || {
-        unsafe { flush_cache(&vec) };
-        let t = Instant::now();
+    crate::benchmarks::bench("seq_mem_read_single", BUFFER_BYTES, 10, || {
         black_box(memory_read_vectorized(&vec));
-        t.elapsed()
-    });
-    Measurement {
-        name: "seq_mem_read_single",
-        latency_ns: Some(ns_per_pass),
-        throughput_bytes_s: Some(throughput),
-    }
+    })
 }
 
 pub fn seq_read_threaded() -> Measurement {
@@ -48,10 +27,6 @@ pub fn seq_read_threaded() -> Measurement {
     let core_ids = core_affinity::get_core_ids().unwrap_or_default();
     let num_threads = core_ids.len().max(1);
     let slice_size = n / num_threads;
-    // One 1 GiB buffer, split across cores (Simon-style). Flush the whole buffer on
-    // the main thread before each pass so workers only time the read, and we evict
-    // all lines — not just each core's ~128 MiB slice (which can stay in L3).
-    let shared = Arc::new((0..n).map(|i| i as Int).collect::<Vec<Int>>());
 
     let start_barrier = Arc::new(Barrier::new(num_threads + 1));
     let end_barrier = Arc::new(Barrier::new(num_threads + 1));
@@ -63,16 +38,17 @@ pub fn seq_read_threaded() -> Measurement {
         let end_b = end_barrier.clone();
         let done_alloc = done_allocating.clone();
         let done = done.clone();
-        let vec = shared.clone();
+
+        let range_start = slice_size * idx;
+        let range_end = if idx + 1 == num_threads {
+            n
+        } else {
+            range_start + slice_size
+        };
+        let vec: Vec<Int> = (range_start..range_end).map(|i| i as Int).collect();
 
         thread::spawn(move || {
             core_affinity::set_for_current(core);
-            let range_start = slice_size * idx;
-            let range_end = if idx + 1 == num_threads {
-                n
-            } else {
-                range_start + slice_size
-            };
 
             done_alloc.wait();
             loop {
@@ -80,7 +56,7 @@ pub fn seq_read_threaded() -> Measurement {
                 if done.load(Ordering::Relaxed) {
                     return;
                 }
-                black_box(memory_read_vectorized(&vec[range_start..range_end]));
+                black_box(memory_read_vectorized(&vec));
                 end_b.wait();
             }
         });
@@ -88,11 +64,17 @@ pub fn seq_read_threaded() -> Measurement {
 
     done_allocating.wait();
 
+    let warmup = Duration::from_secs(1);
+    let t = Instant::now();
+    while t.elapsed() < warmup {
+        start_barrier.wait();
+        end_barrier.wait();
+    }
+
     let duration = Duration::from_secs(10);
     let t = Instant::now();
     let mut iters: u64 = 0;
     while t.elapsed() < duration {
-        unsafe { flush_cache(shared.as_ref()) };
         start_barrier.wait();
         end_barrier.wait();
         iters += 1;
@@ -114,18 +96,10 @@ pub fn seq_read_threaded() -> Measurement {
 pub fn seq_write_single() -> Measurement {
     let n = BUFFER_BYTES / 8;
     let mut vec: Vec<Int> = (0..n).map(|i| i as Int).collect();
-    let (ns_per_pass, throughput) = measure_cold_passes(BUFFER_BYTES, 10, || {
-        unsafe { flush_cache(&vec) };
-        let t = Instant::now();
+    crate::benchmarks::bench("seq_mem_write_single", BUFFER_BYTES, 10, || {
         memory_write_vectorized(&mut vec);
         black_box(vec[0]);
-        t.elapsed()
-    });
-    Measurement {
-        name: "seq_mem_write_single",
-        latency_ns: Some(ns_per_pass),
-        throughput_bytes_s: Some(throughput),
-    }
+    })
 }
 
 pub fn seq_write_threaded() -> Measurement {
@@ -133,7 +107,6 @@ pub fn seq_write_threaded() -> Measurement {
     let core_ids = core_affinity::get_core_ids().unwrap_or_default();
     let num_threads = core_ids.len().max(1);
     let slice_size = n / num_threads;
-    let shared = Arc::new((0..n).map(|i| i as Int).collect::<Vec<Int>>());
 
     let start_barrier = Arc::new(Barrier::new(num_threads + 1));
     let end_barrier = Arc::new(Barrier::new(num_threads + 1));
@@ -145,16 +118,17 @@ pub fn seq_write_threaded() -> Measurement {
         let end_b = end_barrier.clone();
         let done_alloc = done_allocating.clone();
         let done = done.clone();
-        let vec = shared.clone();
+
+        let range_start = slice_size * idx;
+        let range_end = if idx + 1 == num_threads {
+            n
+        } else {
+            range_start + slice_size
+        };
+        let mut vec: Vec<Int> = (range_start..range_end).map(|i| i as Int).collect();
 
         thread::spawn(move || {
             core_affinity::set_for_current(core);
-            let range_start = slice_size * idx;
-            let range_end = if idx + 1 == num_threads {
-                n
-            } else {
-                range_start + slice_size
-            };
 
             done_alloc.wait();
             loop {
@@ -162,15 +136,8 @@ pub fn seq_write_threaded() -> Measurement {
                 if done.load(Ordering::Relaxed) {
                     return;
                 }
-                // SAFETY: each thread writes a disjoint sub-slice of the shared vec.
-                let slice = unsafe {
-                    std::slice::from_raw_parts_mut(
-                        vec.as_ptr().add(range_start) as *mut Int,
-                        range_end - range_start,
-                    )
-                };
-                memory_write_vectorized(slice);
-                black_box(slice[0]);
+                memory_write_vectorized(&mut vec);
+                black_box(vec[0]);
                 end_b.wait();
             }
         });
@@ -178,11 +145,17 @@ pub fn seq_write_threaded() -> Measurement {
 
     done_allocating.wait();
 
+    let warmup = Duration::from_secs(1);
+    let t = Instant::now();
+    while t.elapsed() < warmup {
+        start_barrier.wait();
+        end_barrier.wait();
+    }
+
     let duration = Duration::from_secs(10);
     let t = Instant::now();
     let mut iters: u64 = 0;
     while t.elapsed() < duration {
-        unsafe { flush_cache(shared.as_ref()) };
         start_barrier.wait();
         end_barrier.wait();
         iters += 1;
@@ -227,58 +200,6 @@ pub fn run() -> Vec<Measurement> {
         seq_write_threaded(),
         random_read(),
     ]
-}
-
-fn measure_cold_passes<F>(size_bytes: usize, duration_secs: u64, mut pass: F) -> (f64, f64)
-where
-    F: FnMut() -> Duration,
-{
-    let deadline = Instant::now() + Duration::from_secs(duration_secs);
-    let mut pass_ns: u128 = 0;
-    let mut samples: u64 = 0;
-    while Instant::now() < deadline {
-        pass_ns += pass().as_nanos() as u128;
-        samples += 1;
-    }
-    let ns_per_pass = pass_ns as f64 / samples as f64;
-    let throughput = size_bytes as f64 / (ns_per_pass / 1e9);
-    (ns_per_pass, throughput)
-}
-
-// Evict buffer from cache so the next pass measures DRAM, not L3.
-unsafe fn flush_cache(data: &[Int]) {
-    let ptr = data.as_ptr() as *const u8;
-    let len = data.len() * 8;
-    let mut offset = 0usize;
-
-    while offset < len {
-        #[cfg(target_arch = "x86_64")]
-        std::arch::asm!(
-            "clflushopt [{addr}]",
-            addr = in(reg) ptr.add(offset),
-            options(nostack, preserves_flags),
-        );
-
-        #[cfg(target_arch = "aarch64")]
-        std::arch::asm!(
-            "dc civac, {addr}",
-            addr = in(reg) ptr.add(offset),
-            options(nostack, preserves_flags),
-        );
-
-        #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-        {
-            let _ = ptr.add(offset);
-        }
-
-        offset += 64;
-    }
-
-    #[cfg(target_arch = "x86_64")]
-    std::arch::asm!("mfence", options(nostack, preserves_flags));
-
-    #[cfg(target_arch = "aarch64")]
-    std::arch::asm!("dsb sy", options(nostack, preserves_flags));
 }
 
 #[inline(never)]

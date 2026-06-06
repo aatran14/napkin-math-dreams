@@ -1,5 +1,6 @@
 // Napkin-math table (SIMON.md order). Trend column:
 //   spark       — throughput (or latency) over daily runs
+//   dual spark  — memoryPerLine rows: Latency + GiB/s side by side
 //   percentile  — p50 vs p99 spread across runs (tail ops; object-storage style)
 //   none        — numbers only
 
@@ -8,16 +9,10 @@ var TABLE = [
     title: "Sequential Memory R/W (64 bytes)",
     napkinLatency: "0.5 ns",
     rows: [
-      { key: "seq_mem_read_single", sub: "Single Thread", metric: "throughput", trend: "spark", color: "#e85d04", memoryPerLine: true },
-      { key: "seq_mem_read_threaded", sub: "Threaded", metric: "throughput", trend: "spark", color: "#111", memoryPerLine: true }
-    ]
-  },
-  {
-    title: "Sequential Memory Write (64 bytes)",
-    napkinLatency: "",
-    rows: [
-      { key: "seq_mem_write_single", sub: "Single Thread", metric: "throughput", trend: "spark", color: "#0891b2", memoryPerLine: true },
-      { key: "seq_mem_write_threaded", sub: "Threaded", metric: "throughput", trend: "spark", color: "#6b7280", memoryPerLine: true }
+      { key: "seq_mem_read_single", sub: "Single Thread (read)", metric: "throughput", trend: "spark", color: "#e85d04", memoryPerLine: true },
+      { key: "seq_mem_read_threaded", sub: "Threaded (read)", metric: "throughput", trend: "spark", color: "#111", memoryPerLine: true },
+      { key: "seq_mem_write_single", sub: "Single Thread (write)", metric: "throughput", trend: "spark", color: "#0891b2", memoryPerLine: true },
+      { key: "seq_mem_write_threaded", sub: "Threaded (write)", metric: "throughput", trend: "spark", color: "#6b7280", memoryPerLine: true }
     ]
   },
   {
@@ -115,16 +110,19 @@ var TABLE = [
 var GI_BYTES = 1073741824;
 var CACHE_LINES_PER_GI = GI_BYTES / 64;
 var popover = null;
+var popover2 = null;
 var popoverMode = "spark";
+var POPOVER_CHART_W = 444;
+var POPOVER_CHART_H = 250;
+var POPOVER_GAP = 8;
+var SPARK_TIMELINE_DAYS = 14;
 
-fetch("data/dead.csv", { cache: "no-store" })
-  .then(function(r) {
-    if (!r.ok) throw new Error("dead.csv HTTP " + r.status);
-    return r.text();
-  })
-  .then(function(csvText) {
-    var rows = parseCSV(csvText);
+var CHANGELOG = [];
+
+function boot(rows, changelog) {
+    CHANGELOG = changelog || [];
     popover = document.getElementById("spark-popover");
+    popover2 = document.getElementById("spark-popover-2");
 
     var byMachine = {};
     rows.forEach(function(row) {
@@ -154,14 +152,13 @@ fetch("data/dead.csv", { cache: "no-store" })
     });
 
     var meta = document.getElementById("machine-meta");
-    var tbody = document.getElementById("bench-tbody");
     var bar = document.querySelector(".machine-bar");
     var table = document.getElementById("bench-table");
 
     if (!machines.length) {
       bar.hidden = true;
       table.hidden = true;
-      meta.textContent = "No benchmark data in dead.csv yet.";
+      meta.textContent = "No benchmark data yet.";
       return;
     }
 
@@ -170,7 +167,7 @@ fetch("data/dead.csv", { cache: "no-store" })
 
     initMachinePicker(machines, pickerState, function(key) {
       hidePopover();
-      location.hash = "m=" + encodeURIComponent(key);
+      history.replaceState(null, "", "#m=" + encodeURIComponent(key));
       renderMachine(key);
     });
 
@@ -180,12 +177,17 @@ fetch("data/dead.csv", { cache: "no-store" })
       updatePickerActiveFromState(pickerState);
       var m = byMachine[key];
       meta.textContent = key + " · latest " + shortDate(m.date);
-      tbody.innerHTML = "";
+      while (table.tBodies.length) table.removeChild(table.tBodies[0]);
       var anyRow = false;
+      var sectionIdx = 0;
 
       TABLE.forEach(function(sec) {
         var present = sec.rows.filter(function(row) { return m.ops[row.key]; });
         if (!present.length) return;
+
+        var secBody = document.createElement("tbody");
+        if (sectionIdx % 2 === 1) secBody.className = "section-alt";
+        sectionIdx++;
 
         var showHead = sec.napkinLatency || present.some(function(r) { return r.sub; });
         if (showHead) {
@@ -197,7 +199,7 @@ fetch("data/dead.csv", { cache: "no-store" })
           addCell(head, "");
           addCell(head, "");
           addCell(head, "");
-          tbody.appendChild(head);
+          secBody.appendChild(head);
         }
 
         present.forEach(function(row) {
@@ -207,35 +209,76 @@ fetch("data/dead.csv", { cache: "no-store" })
           addCell(tr, opLabel);
           fillMetricCells(tr, row, csvRow);
           addTrendCell(tr, row, m, opLabel, key);
-          tbody.appendChild(tr);
+          secBody.appendChild(tr);
           anyRow = true;
         });
+
+        table.appendChild(secBody);
       });
 
       if (!anyRow) {
+        var secBody = document.createElement("tbody");
         var tr = document.createElement("tr");
         var td = document.createElement("td");
         td.colSpan = 6;
         td.textContent = "No rows for this machine.";
         tr.appendChild(td);
-        tbody.appendChild(tr);
+        secBody.appendChild(tr);
+        table.appendChild(secBody);
       }
     }
 
     renderMachine(initial);
-  })
-  .catch(function(err) {
+    renderChangelog();
+}
+
+function fail(err) {
     var meta = document.getElementById("machine-meta");
     var bar = document.querySelector(".machine-bar");
     var table = document.getElementById("bench-table");
     if (bar) bar.hidden = true;
     if (table) table.hidden = true;
     if (meta) {
-      meta.textContent = "Could not load data/dead.csv — " + err.message
-        + ". Serve the repo (e.g. python3 -m http.server) instead of opening the HTML file directly.";
+      meta.textContent = "Could not load benchmark data — " + err.message
+        + ". Run `make publish`, or serve the repo (python3 -m http.server) instead of opening the file directly.";
     }
     console.error(err);
-  });
+}
+
+function renderChangelog() {
+    var el = document.getElementById("changelog");
+    if (!el) return;
+    if (!CHANGELOG.length) { el.hidden = true; return; }
+    el.hidden = false;
+    el.innerHTML = "<h2>Changelog</h2>";
+    var ul = document.createElement("ul");
+    ul.className = "changelog-list";
+    CHANGELOG.slice().sort(function(a, b) {
+      return (b.date || "").localeCompare(a.date || "");
+    }).forEach(function(entry) {
+      var li = document.createElement("li");
+      var tag = entry.type ? ("[" + entry.type + "] ") : "";
+      li.textContent = (entry.date || "") + " — " + tag + (entry.description || "");
+      ul.appendChild(li);
+    });
+    el.appendChild(ul);
+}
+
+if (window.__NAPKIN_DATA__ && Array.isArray(window.__NAPKIN_DATA__.rows)) {
+  boot(window.__NAPKIN_DATA__.rows, window.__NAPKIN_DATA__.changelog);
+} else {
+  Promise.all([
+    fetch("data/data.csv", { cache: "no-store" }).then(function(r) {
+      if (!r.ok) throw new Error("data.csv HTTP " + r.status);
+      return r.text();
+    }),
+    fetch("data/changelog.json", { cache: "no-store" })
+      .then(function(r) { return r.ok ? r.json() : []; })
+      .catch(function() { return []; })
+  ]).then(function(res) {
+    boot(parseCSV(res[0]), res[1]);
+  }).catch(fail);
+}
 
 function fillMetricCells(tr, row, csvRow) {
   var lat_ns = parseFloat(csvRow.latency_ns);
@@ -262,23 +305,11 @@ function addTrendCell(tr, row, m, label, machineKey) {
   }
 
   if (row.trend === "spark") {
-    var points = seriesPoints(m.series[row.key], row.metric);
-    if (!points.length) {
-      td.textContent = "—";
-      tr.appendChild(td);
-      return;
+    if (row.memoryPerLine) {
+      appendDualSparkTrend(td, row, m, label, machineKey);
+    } else {
+      appendSingleSparkTrend(td, row, m, label, machineKey);
     }
-    var wrap = document.createElement("div");
-    wrap.className = "spark-wrap";
-    var svg = makeSparkSvg(100, 26, points, row.color || "#e85d04");
-    svg.classList.add("spark-mini");
-    wrap.appendChild(svg);
-    wrap.addEventListener("mouseenter", function(e) {
-      showSparkPopover(e, points, label, row.color || "#e85d04", machineKey, row.metric);
-    });
-    wrap.addEventListener("mousemove", positionPopover);
-    wrap.addEventListener("mouseleave", hidePopover);
-    td.appendChild(wrap);
     tr.appendChild(td);
     return;
   }
@@ -303,18 +334,82 @@ function addTrendCell(tr, row, m, label, machineKey) {
   }
 }
 
-function seriesPoints(byDay, metric) {
+function appendSingleSparkTrend(td, row, m, label, machineKey) {
+  var points = seriesPoints(m.series[row.key], row.metric, row);
+  if (!points.length) {
+    td.textContent = "—";
+    return;
+  }
+  var unit = sparkYUnit(row.metric, row);
+  var wrap = document.createElement("div");
+  wrap.className = "spark-wrap";
+  wrap.appendChild(makeSparkMiniVisual(points, row.color || "#e85d04", unit));
+  wrap.addEventListener("mouseenter", function(e) {
+    showSparkPopover(e, points, label, row.color || "#e85d04", machineKey, row.metric, row);
+  });
+  wrap.addEventListener("mousemove", positionPopover);
+  wrap.addEventListener("mouseleave", hidePopover);
+  td.appendChild(wrap);
+}
+
+function appendDualSparkTrend(td, row, m, label, machineKey) {
+  var latPoints = seriesPoints(m.series[row.key], "latency", row);
+  var thrPoints = seriesPoints(m.series[row.key], "throughput", row);
+  if (!latPoints.length && !thrPoints.length) {
+    td.textContent = "—";
+    return;
+  }
+  var wrap = document.createElement("div");
+  wrap.className = "spark-dual";
+  if (latPoints.length) {
+    wrap.appendChild(makeSparkMiniVisual(latPoints, "#0891b2", "Latency"));
+  }
+  if (thrPoints.length) {
+    wrap.appendChild(makeSparkMiniVisual(thrPoints, row.color || "#e85d04", "GiB/s"));
+  }
+  wrap.addEventListener("mouseenter", function(e) {
+    showDualSparkPopover(e, latPoints, thrPoints, label, machineKey, row);
+  });
+  wrap.addEventListener("mousemove", positionPopover);
+  wrap.addEventListener("mouseleave", hidePopover);
+  td.appendChild(wrap);
+}
+
+function makeSparkMiniVisual(points, color, unitLabel) {
+  var item = document.createElement("div");
+  item.className = "spark-dual-item";
+  var svg = makeSparkSvg(52, 26, points, color);
+  svg.classList.add("spark-mini");
+  item.appendChild(svg);
+  var lbl = document.createElement("div");
+  lbl.className = "spark-dual-label";
+  lbl.textContent = unitLabel;
+  item.appendChild(lbl);
+  return item;
+}
+
+function sparkYUnit(metric, row) {
+  if (metric === "throughput") return "GiB/s";
+  if (row && row.memoryPerLine) return "Latency";
+  return "μs";
+}
+
+function seriesPoints(byDay, metric, row) {
   if (!byDay) return [];
   return Object.keys(byDay).sort().map(function(day) {
-    var row = byDay[day];
+    var csvRow = byDay[day];
     var v;
     if (metric === "throughput") {
-      v = parseFloat(row.throughput_bytes_s) / 1073741824;
+      v = parseFloat(csvRow.throughput_bytes_s) / 1073741824;
       if (!isFinite(v)) return null;
     } else {
-      v = parseFloat(row.latency_ns);
+      v = parseFloat(csvRow.latency_ns);
       if (!isFinite(v)) return null;
-      v = v / 1000;
+      if (row && row.memoryPerLine) {
+        v = perCacheLineNs(v);
+      } else {
+        v = v / 1000;
+      }
     }
     return { day: day, v: v };
   }).filter(Boolean);
@@ -390,41 +485,59 @@ function makePercentileSvg(w, h, pct, opts) {
   return svg;
 }
 
-function showSparkPopover(e, points, label, color, machineKey, metric) {
+function showSparkPopover(e, points, label, color, machineKey, metric, row) {
   popoverMode = "spark";
-  var yUnit = metric === "throughput" ? "GiB/s" : "μs";
-  var chartTitle = shortMachine(machineKey) + " — " + label;
-  document.getElementById("spark-popover-title").textContent = chartTitle;
-
-  var svg = document.getElementById("spark-popover-svg");
-  var big = makeSparkSvg(420, 200, points, color, {
-    showDots: true,
-    labeled: true,
-    yUnit: yUnit,
-    xLabel: "Run date"
-  });
-  svg.innerHTML = "";
-  while (big.firstChild) svg.appendChild(big.firstChild);
-  svg.setAttribute("width", "420");
-  svg.setAttribute("height", "200");
-  svg.setAttribute("viewBox", "0 0 420 200");
+  var title = shortMachine(machineKey) + " — " + label;
+  fillPopover(popover, "spark-popover-title", "spark-popover-body", title,
+    makePopoverChart(points, color, row, metric));
+  popover2.hidden = true;
+  popover2.classList.remove("show");
   popover.hidden = false;
   positionPopover(e);
   requestAnimationFrame(function() { popover.classList.add("show"); });
 }
 
+function showDualSparkPopover(e, latPoints, thrPoints, label, machineKey, row) {
+  popoverMode = "dual";
+  var base = shortMachine(machineKey) + " — " + label;
+  fillPopover(popover, "spark-popover-title", "spark-popover-body", base + " · latency (ns)",
+    latPoints.length ? makePopoverChart(latPoints, "#0891b2", row, "latency", "latency (ns)") : null);
+  fillPopover(popover2, "spark-popover-title-2", "spark-popover-body-2", base + " · throughput (GiB)",
+    thrPoints.length ? makePopoverChart(thrPoints, row.color || "#e85d04", row, "throughput", "throughput (GiB)") : null);
+  popover.hidden = !latPoints.length;
+  popover2.hidden = !thrPoints.length;
+  positionDualPopover(e);
+  requestAnimationFrame(function() {
+    if (!popover.hidden) popover.classList.add("show");
+    if (!popover2.hidden) popover2.classList.add("show");
+  });
+}
+
+function fillPopover(el, titleId, bodyId, title, chart) {
+  document.getElementById(titleId).textContent = title;
+  var body = document.getElementById(bodyId);
+  body.innerHTML = "";
+  if (chart) body.appendChild(chart);
+}
+
+function makePopoverChart(points, color, row, metric, yUnitOverride) {
+  var timeline = expandPointsTimeline(points, SPARK_TIMELINE_DAYS);
+  return makeSparkSvg(420, 200, timeline, color, {
+    showDots: true,
+    labeled: true,
+    yUnit: yUnitOverride || sparkYUnit(metric, row),
+    xLabel: "Date",
+    timelineDays: SPARK_TIMELINE_DAYS
+  });
+}
+
 function showPercentilePopover(e, pct, label, machineKey) {
   popoverMode = "percentile";
-  document.getElementById("spark-popover-title").textContent =
-    shortMachine(machineKey) + " — " + label;
-
-  var svg = document.getElementById("spark-popover-svg");
-  svg.innerHTML = "";
-  var big = makePercentileSvg(320, 120, pct, { labeled: true });
-  while (big.firstChild) svg.appendChild(big.firstChild);
-  svg.setAttribute("width", "320");
-  svg.setAttribute("height", "120");
-  svg.setAttribute("viewBox", "0 0 320 120");
+  fillPopover(popover, "spark-popover-title", "spark-popover-body",
+    shortMachine(machineKey) + " — " + label,
+    makePercentileSvg(320, 120, pct, { labeled: true }));
+  popover2.hidden = true;
+  popover2.classList.remove("show");
   popover.hidden = false;
   positionPopover(e);
   requestAnimationFrame(function() { popover.classList.add("show"); });
@@ -433,18 +546,50 @@ function showPercentilePopover(e, pct, label, machineKey) {
 function hidePopover() {
   popover.classList.remove("show");
   popover.hidden = true;
+  popover2.classList.remove("show");
+  popover2.hidden = true;
 }
 
 function positionPopover(e) {
+  if (popoverMode === "dual") {
+    positionDualPopover(e);
+    return;
+  }
   var pad = 12;
-  var w = popoverMode === "percentile" ? 360 : 460;
-  var h = popoverMode === "percentile" ? 180 : 250;
-  var x = e.clientX + pad;
+  var w = popoverMode === "percentile" ? 360 : POPOVER_CHART_W;
+  var h = popoverMode === "percentile" ? 180 : POPOVER_CHART_H;
+  placePopover(popover, e.clientX + pad, e.clientY + pad, w, h);
+}
+
+function positionDualPopover(e) {
+  var pad = 12;
+  var popW = POPOVER_CHART_W;
+  var popH = POPOVER_CHART_H;
+  var totalW = popW * 2 + POPOVER_GAP;
+  var x = e.clientX - totalW / 2;
   var y = e.clientY + pad;
-  if (x + w > window.innerWidth) x = e.clientX - w - pad;
-  if (y + h > window.innerHeight) y = e.clientY - h - pad;
-  popover.style.left = x + "px";
-  popover.style.top = y + "px";
+
+  if (x < pad) x = pad;
+  if (x + totalW > window.innerWidth - pad) x = window.innerWidth - totalW - pad;
+  if (y + popH > window.innerHeight - pad) y = e.clientY - popH - pad;
+  if (y < pad) y = pad;
+
+  if (!popover.hidden) {
+    popover.style.left = x + "px";
+    popover.style.top = y + "px";
+  }
+  if (!popover2.hidden) {
+    popover2.style.left = (x + popW + POPOVER_GAP) + "px";
+    popover2.style.top = y + "px";
+  }
+}
+
+function placePopover(el, x, y, w, h) {
+  var pad = 12;
+  if (x + w > window.innerWidth) x = Math.max(pad, window.innerWidth - w - pad);
+  if (y + h > window.innerHeight) y = Math.max(pad, window.innerHeight - h - pad);
+  el.style.left = x + "px";
+  el.style.top = y + "px";
 }
 
 function svgText(svg, x, y, text, opts) {
@@ -458,18 +603,71 @@ function svgText(svg, x, y, text, opts) {
   if (opts.anchor === "middle") t.setAttribute("text-anchor", "middle");
   if (opts.anchor === "end") t.setAttribute("text-anchor", "end");
   t.textContent = text;
+  if (opts.rotate != null) {
+    t.setAttribute("transform", "rotate(" + opts.rotate + " " + x + " " + y + ")");
+  }
   svg.appendChild(t);
   return t;
 }
 
-function fmtSparkY(v, yUnit) {
-  if (yUnit === "GiB/s") return v >= 10 ? v.toFixed(0) : v.toFixed(1);
+function fmtSparkY(v, yUnit, axisSpan) {
+  axisSpan = axisSpan || Math.abs(v) || 1;
+  if (yUnit === "Latency" || yUnit === "latency (ns)") {
+    if (axisSpan < 0.2) return v.toFixed(2);
+    if (axisSpan < 2) return v.toFixed(1);
+    return v.toFixed(0);
+  }
+  if (yUnit === "GiB/s" || yUnit === "throughput (GiB)") {
+    if (axisSpan < 0.05) return v.toFixed(3);
+    if (axisSpan < 0.5) return v.toFixed(2);
+    if (axisSpan < 5) return v.toFixed(1);
+    return v.toFixed(0);
+  }
   if (v >= 1000) return (v / 1000).toFixed(1) + "k";
+  if (axisSpan < 5) return v.toFixed(1);
   return v.toFixed(0);
 }
 
 function shortDayLabel(day) {
   return day.length >= 10 ? day.slice(5) : day;
+}
+
+function parseDayKey(day) {
+  var p = day.slice(0, 10).split("-");
+  return new Date(+p[0], +p[1] - 1, +p[2]);
+}
+
+function formatDayKey(d) {
+  var y = d.getFullYear();
+  var m = d.getMonth() + 1;
+  var dd = d.getDate();
+  return y + "-" + (m < 10 ? "0" : "") + m + "-" + (dd < 10 ? "0" : "") + dd;
+}
+
+function addDays(d, n) {
+  var r = new Date(d.getTime());
+  r.setDate(r.getDate() + n);
+  return r;
+}
+
+function expandPointsTimeline(points, slots) {
+  if (!points.length) return [];
+  var latest = points[points.length - 1].day.slice(0, 10);
+  var latestDate = parseDayKey(latest);
+  var byDay = {};
+  points.forEach(function(p) {
+    byDay[p.day.slice(0, 10)] = p.v;
+  });
+  var out = [];
+  for (var i = 0; i < slots; i++) {
+    var day = formatDayKey(addDays(latestDate, -((slots - 1) - i)));
+    out.push({ day: day, v: byDay[day] != null ? byDay[day] : null });
+  }
+  return out;
+}
+
+function sparkXDateLabel(day, slots) {
+  return slots > 7 ? shortDayLabel(day) : shortDate(day);
 }
 
 function makeSparkSvg(w, h, points, color, opts) {
@@ -478,10 +676,11 @@ function makeSparkSvg(w, h, points, color, opts) {
   var showDots = opts.showDots;
   var labeled = opts.labeled;
   var yUnit = opts.yUnit || "GiB/s";
-  var xLabel = opts.xLabel || "Run date";
+  var xLabel = opts.xLabel || "Date";
+  var timelineDays = opts.timelineDays || 0;
 
   var pad = labeled
-    ? { t: 10, r: 14, b: 52, l: 52 }
+    ? { t: 10, r: 14, b: timelineDays ? 72 : 64, l: 52 }
     : { t: 4, r: 3, b: 4, l: 3 };
   var plotW = w - pad.l - pad.r;
   var plotH = h - pad.t - pad.b;
@@ -489,13 +688,30 @@ function makeSparkSvg(w, h, points, color, opts) {
   var plotT = pad.t;
   var plotB = pad.t + plotH;
 
-  var vals = points.map(function(p) { return p.v; });
-  var yMin = Math.min.apply(null, vals);
-  var yMax = Math.max.apply(null, vals);
-  if (yMin === yMax) { yMin *= 0.85; yMax *= 1.15 || 1; }
-  var yPad = (yMax - yMin) * 0.08 || 0.1;
-  yMin -= yPad;
-  yMax += yPad;
+  var vals = points.map(function(p) { return p.v; }).filter(function(v) { return v != null; });
+  if (!vals.length) {
+    var empty = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    empty.setAttribute("width", w);
+    empty.setAttribute("height", h);
+    return empty;
+  }
+  var dataMin = Math.min.apply(null, vals);
+  var dataMax = Math.max.apply(null, vals);
+  var mid = (dataMin + dataMax) / 2;
+  var span = dataMax - dataMin;
+  // Don't stretch tiny run-to-run noise across the full chart height.
+  var minSpan = Math.max(Math.abs(mid) * 0.1, 1e-9);
+  if (span < minSpan) {
+    yMin = mid - minSpan / 2;
+    yMax = mid + minSpan / 2;
+  } else {
+    yMin = dataMin;
+    yMax = dataMax;
+    var yPad = span * 0.08 || 0.1;
+    yMin -= yPad;
+    yMax += yPad;
+  }
+  var axisSpan = yMax - yMin;
 
   var n = points.length;
   var xAt = function(i) {
@@ -530,23 +746,28 @@ function makeSparkSvg(w, h, points, color, opts) {
       grid.setAttribute("stroke", "#eee");
       grid.setAttribute("stroke-width", "1");
       svg.appendChild(grid);
-      svgText(svg, plotL - 6, y + 3, fmtSparkY(v, yUnit), { anchor: "end", size: "9" });
+      svgText(svg, plotL - 6, y + 3, fmtSparkY(v, yUnit, axisSpan), { anchor: "end", size: "9" });
     });
 
     var yTitle = svgText(svg, 14, plotT + plotH / 2, yUnit, { size: "10", fill: "#666", anchor: "middle" });
     yTitle.setAttribute("transform", "rotate(-90 14 " + (plotT + plotH / 2) + ")");
 
-    var xIdx = n <= 5
+    var xIdx = timelineDays
       ? points.map(function(_, i) { return i; })
-      : [0, Math.floor((n - 1) / 2), n - 1];
+      : n <= 7
+        ? points.map(function(_, i) { return i; })
+        : [0, Math.floor((n - 1) / 2), n - 1];
     xIdx.forEach(function(i) {
-      svgText(svg, xAt(i), plotB + 14, shortDayLabel(points[i].day), { anchor: "middle", size: "9" });
+      var tx = xAt(i);
+      var ty = plotB + 6;
+      svgText(svg, tx, ty, sparkXDateLabel(points[i].day, n), { anchor: "end", size: "8", rotate: -45 });
     });
-    svgText(svg, plotL + plotW / 2, h - 6, xLabel, { anchor: "middle", size: "10", fill: "#666" });
+    svgText(svg, plotL + plotW / 2, h - 4, xLabel, { anchor: "middle", size: "10", fill: "#666" });
   }
 
-  var coords = points.map(function(p, i) {
-    return [xAt(i), yAt(p.v)];
+  var dataCoords = [];
+  points.forEach(function(p, i) {
+    if (p.v != null) dataCoords.push({ x: xAt(i), y: yAt(p.v), i: i });
   });
 
   var fillColor = "rgba(0,0,0,0.08)";
@@ -557,29 +778,43 @@ function makeSparkSvg(w, h, points, color, opts) {
     fillColor = "rgba(" + r + "," + g + "," + b + ",0.15)";
   }
 
-  var area = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
-  var areaPts = coords.map(function(c) { return c[0] + "," + c[1]; }).join(" ");
-  areaPts += " " + coords[coords.length - 1][0] + "," + plotB;
-  areaPts += " " + coords[0][0] + "," + plotB;
-  area.setAttribute("points", areaPts);
-  area.setAttribute("fill", fillColor);
-  area.setAttribute("stroke", "none");
-  svg.appendChild(area);
+  var segments = [];
+  var current = [];
+  dataCoords.forEach(function(c, idx) {
+    if (!idx || c.i - dataCoords[idx - 1].i === 1) {
+      current.push(c);
+    } else {
+      if (current.length) segments.push(current);
+      current = [c];
+    }
+  });
+  if (current.length) segments.push(current);
 
-  if (n > 1) {
-    var line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
-    line.setAttribute("points", coords.map(function(c) { return c[0] + "," + c[1]; }).join(" "));
-    line.setAttribute("stroke", color);
-    line.setAttribute("stroke-width", showDots ? "2" : "1.5");
-    line.setAttribute("fill", "none");
-    svg.appendChild(line);
-  }
+  segments.forEach(function(seg) {
+    if (seg.length > 1) {
+      var area = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+      var areaPts = seg.map(function(c) { return c.x + "," + c.y; }).join(" ");
+      areaPts += " " + seg[seg.length - 1].x + "," + plotB;
+      areaPts += " " + seg[0].x + "," + plotB;
+      area.setAttribute("points", areaPts);
+      area.setAttribute("fill", fillColor);
+      area.setAttribute("stroke", "none");
+      svg.appendChild(area);
 
-  if (showDots || n === 1) {
-    coords.forEach(function(c) {
+      var line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+      line.setAttribute("points", seg.map(function(c) { return c.x + "," + c.y; }).join(" "));
+      line.setAttribute("stroke", color);
+      line.setAttribute("stroke-width", showDots ? "2" : "1.5");
+      line.setAttribute("fill", "none");
+      svg.appendChild(line);
+    }
+  });
+
+  if (showDots || dataCoords.length === 1) {
+    dataCoords.forEach(function(c) {
       var dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-      dot.setAttribute("cx", c[0]);
-      dot.setAttribute("cy", c[1]);
+      dot.setAttribute("cx", c.x);
+      dot.setAttribute("cy", c.y);
       dot.setAttribute("r", "3");
       dot.setAttribute("fill", color);
       svg.appendChild(dot);
@@ -621,18 +856,32 @@ function partitionByCloud(machines) {
   return { gcp: gcp, aws: aws, other: other };
 }
 
-function buildCloudGrid(container, list, labelFn, state, onSelect, menu) {
+function buildCloudGrid(container, list, labelFn, state, onSelect) {
   container.innerHTML = "";
   var grid = document.createElement("div");
   grid.className = "picker-grid";
   list.forEach(function(key) {
-    grid.appendChild(makePickerCell(labelFn(key), key, state, onSelect, menu));
+    grid.appendChild(makePickerCell(labelFn(key), key, state, onSelect));
   });
   container.appendChild(grid);
 }
 
+function positionPickerMenu(menu) {
+  var bar = document.getElementById("picker-trigger");
+  var r = bar.getBoundingClientRect();
+  menu.style.top = (r.bottom + 6) + "px";
+  menu.style.left = (r.left + r.width / 2) + "px";
+}
+
+function setPickerOpen(menu, toggle, open) {
+  menu.classList.toggle("open", open);
+  toggle.setAttribute("aria-expanded", open ? "true" : "false");
+  if (open) positionPickerMenu(menu);
+}
+
 function initMachinePicker(machines, state, onSelect) {
-  var trigger = document.getElementById("picker-trigger");
+  var picker = document.getElementById("machine-picker");
+  var toggle = document.getElementById("picker-toggle");
   var menu = document.getElementById("picker-menu");
   var gridGcp = document.getElementById("picker-grid-gcp");
   var gridAws = document.getElementById("picker-grid-aws");
@@ -644,8 +893,8 @@ function initMachinePicker(machines, state, onSelect) {
   listOther.innerHTML = "";
   var parts = partitionByCloud(machines);
 
-  buildCloudGrid(gridGcp, parts.gcp, shortMachine, state, onSelect, menu);
-  buildCloudGrid(gridAws, parts.aws, shortAws, state, onSelect, menu);
+  buildCloudGrid(gridGcp, parts.gcp, shortMachine, state, onSelect);
+  buildCloudGrid(gridAws, parts.aws, shortAws, state, onSelect);
 
   gcpHeading.hidden = !parts.gcp.length;
   gridGcp.hidden = !parts.gcp.length;
@@ -655,7 +904,7 @@ function initMachinePicker(machines, state, onSelect) {
   if (parts.other.length) {
     otherHeading.hidden = false;
     parts.other.forEach(function(key) {
-      listOther.appendChild(makePickerCell(pickerLabel(key), key, state, onSelect, menu));
+      listOther.appendChild(makePickerCell(pickerLabel(key), key, state, onSelect));
     });
   } else {
     otherHeading.hidden = true;
@@ -663,42 +912,51 @@ function initMachinePicker(machines, state, onSelect) {
 
   setPickerLabel(state.selected);
 
-  trigger.addEventListener("click", function(e) {
+  toggle.addEventListener("click", function(e) {
     e.stopPropagation();
-    var open = !menu.hidden;
-    menu.hidden = open;
-    trigger.setAttribute("aria-expanded", open ? "false" : "true");
+    setPickerOpen(menu, toggle, !menu.classList.contains("open"));
   });
 
-  document.addEventListener("click", function() {
-    menu.hidden = true;
-    trigger.setAttribute("aria-expanded", "false");
+  document.addEventListener("mousedown", function(e) {
+    if (!menu.classList.contains("open")) return;
+    if (!picker.contains(e.target)) setPickerOpen(menu, toggle, false);
   });
 
-  menu.addEventListener("click", function(e) {
-    e.stopPropagation();
+  window.addEventListener("resize", function() {
+    if (menu.classList.contains("open")) positionPickerMenu(menu);
   });
 }
 
-function makePickerCell(label, key, state, onSelect, menu) {
-  var btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "picker-cell";
-  btn.textContent = label;
-  btn.dataset.machine = key;
-  btn.classList.add("available");
-  if (key === state.selected) btn.classList.add("active");
+function makePickerCell(label, key, state, onSelect) {
+  var row = document.createElement("div");
+  row.className = "picker-cell available";
+  row.dataset.machine = key;
+  row.setAttribute("role", "option");
+  if (key === state.selected) row.classList.add("active");
 
-  btn.addEventListener("click", function() {
+  var box = document.createElement("input");
+  box.type = "checkbox";
+  box.className = "picker-check";
+  box.tabIndex = -1;
+  box.checked = key === state.selected;
+
+  row.appendChild(box);
+  row.appendChild(document.createTextNode(label));
+
+  row.addEventListener("mousedown", function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+  });
+
+  row.addEventListener("click", function(e) {
+    e.stopPropagation();
     state.selected = key;
     setPickerLabel(key);
     updatePickerActiveFromState(state);
-    menu.hidden = true;
-    document.getElementById("picker-trigger").setAttribute("aria-expanded", "false");
     onSelect(key);
   });
 
-  return btn;
+  return row;
 }
 
 function setPickerLabel(key) {
@@ -710,8 +968,11 @@ function pickerLabel(id) {
 }
 
 function updatePickerActiveFromState(state) {
-  document.querySelectorAll(".picker-cell.available").forEach(function(btn) {
-    btn.classList.toggle("active", btn.dataset.machine === state.selected);
+  document.querySelectorAll(".picker-cell.available").forEach(function(row) {
+    var on = row.dataset.machine === state.selected;
+    row.classList.toggle("active", on);
+    var box = row.querySelector(".picker-check");
+    if (box) box.checked = on;
   });
 }
 
