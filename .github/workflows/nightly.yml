@@ -9,7 +9,7 @@ name: Nightly Benchmarks
 
 on:
   schedule:
-    - cron: "0 3 * * *" # 03:00 UTC
+    - cron: "0 10 * * *" # 10:00 UTC = 03:00 America/Los_Angeles (PDT)
   workflow_dispatch: {}
 
 permissions:
