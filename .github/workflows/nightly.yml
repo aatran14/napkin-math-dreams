@@ -1,0 +1,65 @@
+name: Nightly Benchmarks
+
+# Provisions the GCP 48-vCPU fleet (c4/c4d/c4a -standard-48-lssd), runs `daily`
+# on each, merges results, rebuilds data.csv + index.html, commits to gh-pages.
+# Auth: a service-account key (secret GCP_SA_KEY) for the napkin-math-dreams
+# project. AWS will be added as a second step once this is green.
+#
+# NOTE: must live on the DEFAULT branch (master) for the schedule to fire.
+
+on:
+  schedule:
+    - cron: "0 6 * * *" # 06:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write # push results back to gh-pages
+
+concurrency:
+  group: nightly-bench
+  cancel-in-progress: false
+
+env:
+  GCP_ZONE: ${{ vars.GCP_ZONE || 'us-east1-b' }}
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout gh-pages (code + data + site)
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ vars.GCP_PROJECT }}
+
+      - name: Run GCP fleet (c4/c4d/c4a -standard-48-lssd)
+        env:
+          CLOUDSDK_CORE_DISABLE_PROMPTS: "1" # don't block on ssh-key prompts in CI
+        run: |
+          : > data/dead.csv   # capture only this run's rows
+          NAPKIN_GCP_ZONE="$GCP_ZONE" bash machines/bench-gcp-fleet.sh
+
+      - name: Publish results
+        run: |
+          set -euo pipefail
+          TODAY=$(date -u +%Y-%m-%d)
+          {
+            echo 'date,machine,cpu,config,operation,latency_ns,throughput_bytes_s,commit'
+            cat data/dead.csv
+          } > "data/${TODAY}.csv"
+          python3 scripts/publish.py
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/ index.html
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "bench: ${TODAY} results"
+          git push
