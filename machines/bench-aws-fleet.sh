@@ -7,7 +7,7 @@ REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 BENCH="$REPO_DIR/machines/bench-aws.sh"
 
 MACHINES=("$@")
-(( ${#MACHINES[@]} )) || MACHINES=(c7i.4xlarge c7a.4xlarge c7g.4xlarge)
+(( ${#MACHINES[@]} )) || MACHINES=(c7i.12xlarge c7a.12xlarge c7g.12xlarge)
 
 for machine in "${MACHINES[@]}"; do
   "$BENCH" "$machine"
