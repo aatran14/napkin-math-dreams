@@ -90,7 +90,8 @@ pub fn random_read() -> Measurement {
 
     drop_caches(&path);
 
-    let num_pages = file_size / page_size;
+    // Cap offsets so an 8 KiB read never runs past EOF (offset + buf_size <= file_size).
+    let num_pages = (file_size - buf_size) / page_size + 1;
     let mut offsets: Vec<u64> = (0..num_pages).map(|i| (i * page_size) as u64).collect();
     {
         use rand::seq::SliceRandom;

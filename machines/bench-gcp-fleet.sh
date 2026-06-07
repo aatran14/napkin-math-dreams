@@ -8,7 +8,7 @@ REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 WORKER="$REPO_DIR/machines/_bench-worker.sh"
 
 MACHINES=("$@")
-(( ${#MACHINES[@]} )) || MACHINES=(c4-standard-16-lssd c4d-standard-16-lssd c4a-standard-16-lssd)
+(( ${#MACHINES[@]} )) || MACHINES=(c4-standard-48-lssd c4d-standard-48-lssd c4a-standard-48-lssd)
 
 for machine in "${MACHINES[@]}"; do
   ZONE="$ZONE" REPO_DIR="$REPO_DIR" "$WORKER" "$machine"
