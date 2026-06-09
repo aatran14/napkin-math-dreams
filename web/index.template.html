@@ -7,42 +7,56 @@
   <!-- INJECT_DATA -->
 </head>
 <body>
-  <h1>Napkin Math Dreams</h1>
-  <p>Napkin-math table · <a href="https://github.com/aatran14/napkin-math-dreams">github</a></p>
-
-  <div id="charts">
-    <div class="machine-bar">
-      <div class="machine-picker" id="machine-picker">
-        <div class="picker-trigger" id="picker-trigger">
-          <button type="button" class="picker-icon" id="picker-toggle" aria-expanded="false" aria-controls="picker-menu">☰</button>
-          <span class="picker-label" id="picker-label">Machine</span>
+  <div class="page-shell">
+    <div class="page-stack">
+      <header class="page-header">
+        <div class="page-header-row">
+          <h1>Napkin Math Dreams</h1>
+          <div class="machine-bar">
+            <div class="machine-picker" id="machine-picker">
+              <button type="button" class="picker-trigger" id="picker-trigger" aria-expanded="false" aria-controls="picker-menu">
+                <span class="picker-icon" aria-hidden="true">☰</span>
+                <span class="picker-label" id="picker-label">Machine</span>
+              </button>
+              <div class="picker-menu" id="picker-menu">
+                <div id="picker-lattice"></div>
+                <div class="picker-section" id="picker-other-heading" hidden>Other</div>
+                <div class="picker-list" id="picker-list-other"></div>
+              </div>
+            </div>
+          </div>
         </div>
-        <div class="picker-menu" id="picker-menu">
-          <div class="picker-section" id="picker-gcp-heading">GCP</div>
-          <div id="picker-grid-gcp"></div>
-          <div class="picker-section" id="picker-aws-heading">AWS</div>
-          <div id="picker-grid-aws"></div>
-          <div class="picker-section" id="picker-other-heading" hidden>Other</div>
-          <div class="picker-list" id="picker-list-other"></div>
+        <p id="bench-error" class="note" hidden></p>
+      </header>
+      <div class="page-table-col">
+        <div id="charts">
+          <table id="bench-table">
+            <colgroup>
+              <col class="col-shrink" span="5">
+              <col class="col-trend">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>Operation</th>
+                <th>Latency</th>
+                <th>Throughput</th>
+                <th>1 MiB</th>
+                <th>1 GiB</th>
+                <th class="trend-col">Trend</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
         </div>
+        <div id="changelog" hidden></div>
       </div>
-      <span id="machine-meta"></span>
+      <div class="page-toc-slot">
+        <nav id="bench-toc" class="page-toc" aria-label="Sections" hidden>
+          <div id="bench-toc-indicator" class="page-toc-indicator" hidden></div>
+        </nav>
+      </div>
     </div>
-    <table id="bench-table">
-      <thead>
-        <tr>
-          <th>Operation</th>
-          <th>Latency</th>
-          <th>Throughput</th>
-          <th>1 MiB</th>
-          <th>1 GiB</th>
-          <th>Trend</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
   </div>
-  <div id="changelog" hidden></div>
   <div id="spark-popover" hidden>
     <div class="title" id="spark-popover-title"></div>
     <div id="spark-popover-body"></div>
@@ -51,6 +65,6 @@
     <div class="title" id="spark-popover-title-2"></div>
     <div id="spark-popover-body-2"></div>
   </div>
-  <script src="js/dashboard.js?v=23"></script>
+  <script src="js/dashboard.js?v=53"></script>
 </body>
 </html>

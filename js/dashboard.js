@@ -1,13 +1,20 @@
 // Napkin-math table (SIMON.md order). Trend column:
 //   spark       — throughput (or latency) over daily runs
 //   dual spark  — memoryPerLine rows: Latency + GiB/s side by side
+//   trendMerge  — section-level merged latency + throughput charts (seq memory)
 //   percentile  — p50 vs p99 spread across runs (tail ops; object-storage style)
 //   none        — numbers only
+
+var MEMORY_TREND_READ = "#e85d04";
+var MEMORY_TREND_WRITE = "#0891b2";
+var MEMORY_THROUGHPUT_Y_MIN = 0;
+var MEMORY_THROUGHPUT_Y_MAX = 200;
 
 var TABLE = [
   {
     title: "Sequential Memory R/W (64 bytes)",
     napkinLatency: "0.5 ns",
+    trendMerge: true,
     rows: [
       { key: "seq_mem_read_single", sub: "Single Thread (read)", metric: "throughput", trend: "spark", color: "#e85d04", memoryPerLine: true },
       { key: "seq_mem_read_threaded", sub: "Threaded (read)", metric: "throughput", trend: "spark", color: "#111", memoryPerLine: true },
@@ -18,7 +25,10 @@ var TABLE = [
   {
     title: "Random Memory R/W (64 bytes)",
     napkinLatency: "20 ns",
-    rows: [{ key: "mem_random_rw", metric: "latency", trend: "percentile" }]
+    rows: [
+      { key: "mem_random_read", sub: "Read", metric: "latency", trend: "percentile" },
+      { key: "mem_random_write", sub: "Write", metric: "latency", trend: "percentile" }
+    ]
   },
   {
     title: "Hashing, not crypto-safe (64 bytes)",
@@ -109,15 +119,40 @@ var TABLE = [
 
 var GI_BYTES = 1073741824;
 var CACHE_LINES_PER_GI = GI_BYTES / 64;
+var STROKE_LATENCY = "#06b6d4";
+var STROKE_THROUGHPUT = "#1e293b";
 var popover = null;
 var popover2 = null;
 var popoverMode = "spark";
 var POPOVER_CHART_W = 444;
 var POPOVER_CHART_H = 250;
-var POPOVER_GAP = 8;
+var POPOVER_GAP = 28;
 var SPARK_TIMELINE_DAYS = 14;
 
 var CHANGELOG = [];
+
+var LEGACY_OP_KEYS = { mem_random_read: "mem_random_rw" };
+
+function resolveOpKey(m, rowKey) {
+  if (m.ops[rowKey]) return rowKey;
+  var legacy = LEGACY_OP_KEYS[rowKey];
+  if (legacy && m.ops[legacy]) return legacy;
+  return null;
+}
+
+function hasOp(m, rowKey) {
+  return !!resolveOpKey(m, rowKey);
+}
+
+function getOp(m, rowKey) {
+  var k = resolveOpKey(m, rowKey);
+  return k ? m.ops[k] : null;
+}
+
+function getSeries(m, rowKey) {
+  var k = resolveOpKey(m, rowKey);
+  return k ? m.series[k] : null;
+}
 
 function boot(rows, changelog) {
     CHANGELOG = changelog || [];
@@ -151,16 +186,24 @@ function boot(rows, changelog) {
       return byMachine[b].date.localeCompare(byMachine[a].date);
     });
 
-    var meta = document.getElementById("machine-meta");
     var bar = document.querySelector(".machine-bar");
     var table = document.getElementById("bench-table");
+    var errEl = document.getElementById("bench-error");
+    var toc = document.getElementById("bench-toc");
 
     if (!machines.length) {
       bar.hidden = true;
       table.hidden = true;
-      meta.textContent = "No benchmark data yet.";
+      if (toc) toc.hidden = true;
+      var stack = document.querySelector(".page-stack");
+      if (stack) stack.classList.remove("has-toc");
+      if (errEl) {
+        errEl.hidden = false;
+        errEl.textContent = "No benchmark data yet.";
+      }
       return;
     }
+    if (errEl) errEl.hidden = true;
 
     var initial = machineFromHash(machines) || machines[0];
     var pickerState = { selected: initial };
@@ -176,18 +219,23 @@ function boot(rows, changelog) {
       setPickerLabel(key);
       updatePickerActiveFromState(pickerState);
       var m = byMachine[key];
-      meta.textContent = key + " · latest " + shortDate(m.date);
       while (table.tBodies.length) table.removeChild(table.tBodies[0]);
+      renderToc(m, toc);
       var anyRow = false;
       var sectionIdx = 0;
+      var prevGroup = null;
 
       TABLE.forEach(function(sec) {
-        var present = sec.rows.filter(function(row) { return m.ops[row.key]; });
+        var present = sec.rows.filter(function(row) { return hasOp(m, row.key); });
         if (!present.length) return;
 
+        var group = tocGroup(sec.title);
+        if (prevGroup !== null && group !== prevGroup) sectionIdx++;
+        prevGroup = group;
+
         var secBody = document.createElement("tbody");
+        secBody.id = sectionSlug(sec.title);
         if (sectionIdx % 2 === 1) secBody.className = "section-alt";
-        sectionIdx++;
 
         var showHead = sec.napkinLatency || present.some(function(r) { return r.sub; });
         if (showHead) {
@@ -202,13 +250,23 @@ function boot(rows, changelog) {
           secBody.appendChild(head);
         }
 
-        present.forEach(function(row) {
-          var csvRow = m.ops[row.key];
+        present.forEach(function(row, rowIdx) {
+          var csvRow = getOp(m, row.key);
           var opLabel = row.sub ? ("├ " + row.sub) : sec.title;
           var tr = document.createElement("tr");
           addCell(tr, opLabel);
           fillMetricCells(tr, row, csvRow);
-          addTrendCell(tr, row, m, opLabel, key);
+          if (sec.trendMerge) {
+            if (rowIdx === 0) {
+              var trendTd = document.createElement("td");
+              trendTd.className = "trend-cell";
+              trendTd.rowSpan = present.length;
+              appendMergedMemoryTrend(trendTd, present, m, sec.title, key);
+              tr.appendChild(trendTd);
+            }
+          } else {
+            addTrendCell(tr, row, m, opLabel, key);
+          }
           secBody.appendChild(tr);
           anyRow = true;
         });
@@ -226,20 +284,30 @@ function boot(rows, changelog) {
         secBody.appendChild(tr);
         table.appendChild(secBody);
       }
+      requestAnimationFrame(function() {
+        updateStickyChrome();
+        syncTocActive();
+      });
     }
 
+    window.addEventListener("resize", updateStickyChrome);
     renderMachine(initial);
     renderChangelog();
 }
 
 function fail(err) {
-    var meta = document.getElementById("machine-meta");
+    var errEl = document.getElementById("bench-error");
     var bar = document.querySelector(".machine-bar");
     var table = document.getElementById("bench-table");
+    var toc = document.getElementById("bench-toc");
     if (bar) bar.hidden = true;
     if (table) table.hidden = true;
-    if (meta) {
-      meta.textContent = "Could not load benchmark data — " + err.message
+    if (toc) toc.hidden = true;
+    var stack = document.querySelector(".page-stack");
+    if (stack) stack.classList.remove("has-toc");
+    if (errEl) {
+      errEl.hidden = false;
+      errEl.textContent = "Could not load benchmark data — " + err.message
         + ". Run `make publish`, or serve the repo (python3 -m http.server) instead of opening the file directly.";
     }
     console.error(err);
@@ -264,29 +332,13 @@ function renderChangelog() {
     el.appendChild(ul);
 }
 
-if (window.__NAPKIN_DATA__ && Array.isArray(window.__NAPKIN_DATA__.rows)) {
-  boot(window.__NAPKIN_DATA__.rows, window.__NAPKIN_DATA__.changelog);
-} else {
-  Promise.all([
-    fetch("data/data.csv", { cache: "no-store" }).then(function(r) {
-      if (!r.ok) throw new Error("data.csv HTTP " + r.status);
-      return r.text();
-    }),
-    fetch("data/changelog.json", { cache: "no-store" })
-      .then(function(r) { return r.ok ? r.json() : []; })
-      .catch(function() { return []; })
-  ]).then(function(res) {
-    boot(parseCSV(res[0]), res[1]);
-  }).catch(fail);
-}
-
 function fillMetricCells(tr, row, csvRow) {
   var lat_ns = parseFloat(csvRow.latency_ns);
   var thr = parseFloat(csvRow.throughput_bytes_s);
 
   var latText = "";
-  if (isFinite(lat_ns)) {
-    latText = row.memoryPerLine ? fmtLatency(perCacheLineNs(lat_ns)) : fmtLatency(lat_ns);
+  if (isFinite(lat_ns) && !row.memoryPerLine) {
+    latText = fmtLatency(lat_ns);
   }
   addCell(tr, latText);
   addCell(tr, isFinite(thr) ? fmtThroughput(thr) : "");
@@ -315,7 +367,7 @@ function addTrendCell(tr, row, m, label, machineKey) {
   }
 
   if (row.trend === "percentile") {
-    var pct = percentileFromSeries(m.series[row.key]);
+    var pct = percentileFromSeries(getSeries(m, row.key));
     if (!pct) {
       td.textContent = "—";
       tr.appendChild(td);
@@ -323,7 +375,7 @@ function addTrendCell(tr, row, m, label, machineKey) {
     }
     var wrap = document.createElement("div");
     wrap.className = "pct-wrap";
-    wrap.appendChild(makePercentileSvg(100, 26, pct));
+    wrap.appendChild(makePercentileChart(pct));
     wrap.addEventListener("mouseenter", function(e) {
       showPercentilePopover(e, pct, label, machineKey);
     });
@@ -334,8 +386,192 @@ function addTrendCell(tr, row, m, label, machineKey) {
   }
 }
 
+function memoryRowThreaded(row) {
+  return row.key.indexOf("_threaded") !== -1;
+}
+
+function memoryRowWrite(row) {
+  return row.key.indexOf("_write_") !== -1;
+}
+
+function memoryTrendSeries(rows, m, metric) {
+  return rows.map(function(row) {
+    var write = memoryRowWrite(row);
+    var threaded = memoryRowThreaded(row);
+    return {
+      points: seriesPoints(getSeries(m, row.key), metric, row),
+      color: write ? MEMORY_TREND_WRITE : MEMORY_TREND_READ,
+      dash: threaded ? "4,2" : null,
+      label: row.sub || row.key
+    };
+  }).filter(function(s) { return s.points.length; });
+}
+
+function appendMergedMemoryTrend(td, rows, m, sectionTitle, machineKey) {
+  var latSeries = memoryTrendSeries(rows, m, "latency");
+  var thrSeries = memoryTrendSeries(rows, m, "throughput");
+  if (!latSeries.length && !thrSeries.length) {
+    td.textContent = "—";
+    return;
+  }
+
+  var wrap = document.createElement("div");
+  wrap.className = "spark-merged";
+
+  var legendSeries = latSeries.length ? latSeries : thrSeries;
+  wrap.appendChild(makeMemoryTrendLegendDetailed(legendSeries));
+
+  if (latSeries.length) {
+    wrap.appendChild(makeMergedSparkBlock(alignMultiSeries(latSeries), "Latency", "ns"));
+  }
+  if (thrSeries.length) {
+    wrap.appendChild(makeMergedSparkBlock(alignMultiSeries(thrSeries), "Throughput", "GiB/s"));
+  }
+
+  wrap.addEventListener("mouseenter", function(e) {
+    showMergedMemoryPopover(e, latSeries, thrSeries, sectionTitle, machineKey);
+  });
+  wrap.addEventListener("mousemove", positionPopover);
+  wrap.addEventListener("mouseleave", hidePopover);
+  td.appendChild(wrap);
+}
+
+function memorySparkOpts(yUnit) {
+  var opts = { yUnit: yUnit };
+  if (yUnit === "GiB/s") {
+    opts.yScaleLock = true;
+    opts.yMin = MEMORY_THROUGHPUT_Y_MIN;
+    opts.yMax = MEMORY_THROUGHPUT_Y_MAX;
+    opts.yTicks = [0, 100, 200];
+  }
+  return opts;
+}
+
+function makeMergedSparkBlock(alignedSeries, unitLabel, yUnit) {
+  var block = document.createElement("div");
+  block.className = "spark-merged-block";
+  var lbl = document.createElement("div");
+  lbl.className = "spark-dual-label";
+  lbl.textContent = unitLabel;
+  block.appendChild(lbl);
+  var svg = makeMultiSparkSvg(148, 44, alignedSeries, memorySparkOpts(yUnit));
+  svg.classList.add("spark-mini");
+  svg.setAttribute("width", "100%");
+  svg.setAttribute("height", "44");
+  block.appendChild(svg);
+  return block;
+}
+
+function makeMemoryTrendLegendDetailed(seriesList) {
+  var leg = makeSparkLegend(seriesList.map(function(s) {
+    return { color: s.color, dash: s.dash, label: s.label };
+  }));
+  leg.classList.add("spark-merged-legend");
+  return leg;
+}
+
+function makeSparkLegend(items) {
+  var leg = document.createElement("div");
+  leg.className = "spark-legend";
+  items.forEach(function(item) {
+    var row = document.createElement("div");
+    row.className = "spark-legend-item";
+    var swatch = document.createElement("span");
+    swatch.className = "spark-legend-swatch" + (item.dash ? " dashed" : "");
+    if (item.dash) {
+      swatch.style.borderColor = item.color;
+    } else {
+      swatch.style.background = item.color;
+    }
+    row.appendChild(swatch);
+    var text = document.createElement("span");
+    text.textContent = item.label;
+    row.appendChild(text);
+    leg.appendChild(row);
+  });
+  return leg;
+}
+
+function makeMergedPopoverChart(alignedSeries, rawSeries, svgOpts) {
+  var root = document.createElement("div");
+  root.className = "spark-popover-merged";
+  var opts = Object.assign({}, svgOpts);
+  var w = opts.w;
+  var h = opts.h;
+  delete opts.w;
+  delete opts.h;
+  root.appendChild(makeMultiSparkSvg(w, h, alignedSeries, opts));
+  root.appendChild(makeMemoryTrendLegendDetailed(rawSeries));
+  return root;
+}
+
+function alignMultiSeries(seriesList) {
+  var daySet = {};
+  seriesList.forEach(function(s) {
+    s.points.forEach(function(p) { daySet[p.day] = true; });
+  });
+  var days = Object.keys(daySet).sort();
+  return seriesList.map(function(s) {
+    var byDay = {};
+    s.points.forEach(function(p) { byDay[p.day] = p.v; });
+    return {
+      color: s.color,
+      dash: s.dash,
+      points: days.map(function(day) {
+        return { day: day, v: byDay[day] != null ? byDay[day] : null };
+      })
+    };
+  });
+}
+
+function showMergedMemoryPopover(e, latSeries, thrSeries, sectionTitle, machineKey) {
+  popoverMode = "dual";
+  var machine = shortMachine(machineKey);
+  var latAligned = latSeries.length
+    ? alignMultiSeries(latSeries.map(function(s) {
+        return { color: s.color, dash: s.dash, points: expandPointsTimeline(s.points, SPARK_TIMELINE_DAYS) };
+      }))
+    : [];
+  var thrAligned = thrSeries.length
+    ? alignMultiSeries(thrSeries.map(function(s) {
+        return { color: s.color, dash: s.dash, points: expandPointsTimeline(s.points, SPARK_TIMELINE_DAYS) };
+      }))
+    : [];
+  fillPopover(popover, "spark-popover-title", "spark-popover-body", machine + " · Latency",
+    latAligned.length
+      ? makeMergedPopoverChart(latAligned, latSeries, {
+          w: POPOVER_CHART_W,
+          h: POPOVER_CHART_H,
+          showDots: true,
+          labeled: true,
+          yUnit: "ns",
+          xLabel: "Date",
+          timelineDays: SPARK_TIMELINE_DAYS
+        })
+      : null);
+  fillPopover(popover2, "spark-popover-title-2", "spark-popover-body-2", machine + " · Throughput",
+    thrAligned.length
+      ? makeMergedPopoverChart(thrAligned, thrSeries, Object.assign({
+          w: POPOVER_CHART_W,
+          h: POPOVER_CHART_H,
+          showDots: true,
+          labeled: true,
+          yUnit: "GiB/s",
+          xLabel: "Date",
+          timelineDays: SPARK_TIMELINE_DAYS
+        }, memorySparkOpts("GiB/s")))
+      : null);
+  popover.hidden = !latAligned.length;
+  popover2.hidden = !thrAligned.length;
+  positionDualPopover(e);
+  requestAnimationFrame(function() {
+    if (!popover.hidden) popover.classList.add("show");
+    if (!popover2.hidden) popover2.classList.add("show");
+  });
+}
+
 function appendSingleSparkTrend(td, row, m, label, machineKey) {
-  var points = seriesPoints(m.series[row.key], row.metric, row);
+  var points = seriesPoints(getSeries(m, row.key), row.metric, row);
   if (!points.length) {
     td.textContent = "—";
     return;
@@ -353,8 +589,8 @@ function appendSingleSparkTrend(td, row, m, label, machineKey) {
 }
 
 function appendDualSparkTrend(td, row, m, label, machineKey) {
-  var latPoints = seriesPoints(m.series[row.key], "latency", row);
-  var thrPoints = seriesPoints(m.series[row.key], "throughput", row);
+  var latPoints = seriesPoints(getSeries(m, row.key), "latency", row);
+  var thrPoints = seriesPoints(getSeries(m, row.key), "throughput", row);
   if (!latPoints.length && !thrPoints.length) {
     td.textContent = "—";
     return;
@@ -362,10 +598,10 @@ function appendDualSparkTrend(td, row, m, label, machineKey) {
   var wrap = document.createElement("div");
   wrap.className = "spark-dual";
   if (latPoints.length) {
-    wrap.appendChild(makeSparkMiniVisual(latPoints, "#0891b2", "Latency"));
+    wrap.appendChild(makeSparkMiniVisual(latPoints, STROKE_LATENCY, "Latency"));
   }
   if (thrPoints.length) {
-    wrap.appendChild(makeSparkMiniVisual(thrPoints, row.color || "#e85d04", "GiB/s"));
+    wrap.appendChild(makeSparkMiniVisual(thrPoints, STROKE_THROUGHPUT, "GiB/s"));
   }
   wrap.addEventListener("mouseenter", function(e) {
     showDualSparkPopover(e, latPoints, thrPoints, label, machineKey, row);
@@ -378,8 +614,10 @@ function appendDualSparkTrend(td, row, m, label, machineKey) {
 function makeSparkMiniVisual(points, color, unitLabel) {
   var item = document.createElement("div");
   item.className = "spark-dual-item";
-  var svg = makeSparkSvg(52, 26, points, color);
+  var svg = makeSparkSvg(96, 38, points, color);
   svg.classList.add("spark-mini");
+  svg.setAttribute("width", "100%");
+  svg.setAttribute("height", "38");
   item.appendChild(svg);
   var lbl = document.createElement("div");
   lbl.className = "spark-dual-label";
@@ -432,57 +670,49 @@ function percentileFromSeries(byDay) {
   };
 }
 
-function makePercentileSvg(w, h, pct, opts) {
+function makePercentileChart(pct, opts) {
   opts = opts || {};
-  var labeled = opts.labeled;
-  var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("width", w);
-  svg.setAttribute("height", h);
-  svg.setAttribute("viewBox", "0 0 " + w + " " + h);
-  if (!labeled) svg.classList.add("pct-mini");
+  var mini = !opts.labeled;
+  var root = document.createElement("div");
+  root.className = mini ? "pct-chart pct-chart-mini" : "pct-chart pct-chart-large";
 
   var maxV = Math.max(pct.p99, pct.p50, 1);
-  var barH = labeled ? 22 : 8;
-  var gap = labeled ? 16 : 4;
-  var x0 = labeled ? 56 : 4;
-  var barW = w - x0 - (labeled ? 100 : 8);
-  var y0 = labeled ? 24 : 4;
+  [
+    { label: "p50", val: pct.p50 },
+    { label: "p99", val: pct.p99 }
+  ].forEach(function(row) {
+    var rowEl = document.createElement("div");
+    rowEl.className = "pct-row";
 
-  function bar(y, val, color, label) {
-    var fw = (val / maxV) * barW;
-    var rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    rect.setAttribute("x", x0);
-    rect.setAttribute("y", y);
-    rect.setAttribute("width", Math.max(fw, 2));
-    rect.setAttribute("height", barH);
-    rect.setAttribute("fill", color);
-    rect.setAttribute("rx", "1");
-    svg.appendChild(rect);
-    var valX = x0 + Math.max(fw, 2) + 6;
-    if (labeled) {
-      svgText(svg, 8, y + barH - 6, label, { size: "10", fill: "#444" });
-      svgText(svg, valX, y + barH - 6, fmtLatency(val), { size: "10", fill: "#666" });
-    } else {
-      svgText(svg, x0 + barW + 2, y + barH - 1, label, { size: "7", fill: "#666" });
-    }
+    var lbl = document.createElement("span");
+    lbl.className = "pct-label";
+    lbl.textContent = row.label;
+
+    var track = document.createElement("span");
+    track.className = "pct-bar-track";
+    var bar = document.createElement("span");
+    bar.className = "pct-bar";
+    bar.style.width = Math.max((row.val / maxV) * 100, 4) + "%";
+    track.appendChild(bar);
+
+    var val = document.createElement("span");
+    val.className = "pct-val";
+    val.textContent = fmtLatency(row.val);
+
+    rowEl.appendChild(lbl);
+    rowEl.appendChild(track);
+    rowEl.appendChild(val);
+    root.appendChild(rowEl);
+  });
+
+  if (opts.labeled) {
+    var footer = document.createElement("div");
+    footer.className = "pct-footer";
+    footer.textContent = "Latency (across " + pct.n + " runs)";
+    root.appendChild(footer);
   }
 
-  if (labeled) {
-    svgText(svg, x0 + barW / 2, h - 8, "Latency (across " + pct.n + " runs)", { anchor: "middle", size: "10", fill: "#666" });
-    var axis = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    axis.setAttribute("x1", x0);
-    axis.setAttribute("x2", x0 + barW);
-    axis.setAttribute("y1", y0 - 4);
-    axis.setAttribute("y2", y0 - 4);
-    axis.setAttribute("stroke", "#999");
-    svg.appendChild(axis);
-    svgText(svg, x0 - 4, y0 - 8, "0", { anchor: "end", size: "9", fill: "#999" });
-    svgText(svg, x0 + barW, y0 - 8, fmtLatency(maxV), { anchor: "start", size: "9", fill: "#999" });
-  }
-
-  bar(y0, pct.p50, "#0891b2", "p50");
-  bar(y0 + barH + gap, pct.p99, "#e85d04", "p99");
-  return svg;
+  return root;
 }
 
 function showSparkPopover(e, points, label, color, machineKey, metric, row) {
@@ -501,9 +731,9 @@ function showDualSparkPopover(e, latPoints, thrPoints, label, machineKey, row) {
   popoverMode = "dual";
   var base = shortMachine(machineKey) + " — " + label;
   fillPopover(popover, "spark-popover-title", "spark-popover-body", base + " · latency (ns)",
-    latPoints.length ? makePopoverChart(latPoints, "#0891b2", row, "latency", "latency (ns)") : null);
+    latPoints.length ? makePopoverChart(latPoints, STROKE_LATENCY, row, "latency", "latency (ns)") : null);
   fillPopover(popover2, "spark-popover-title-2", "spark-popover-body-2", base + " · throughput (GiB)",
-    thrPoints.length ? makePopoverChart(thrPoints, row.color || "#e85d04", row, "throughput", "throughput (GiB)") : null);
+    thrPoints.length ? makePopoverChart(thrPoints, STROKE_THROUGHPUT, row, "throughput", "throughput (GiB)") : null);
   popover.hidden = !latPoints.length;
   popover2.hidden = !thrPoints.length;
   positionDualPopover(e);
@@ -535,7 +765,7 @@ function showPercentilePopover(e, pct, label, machineKey) {
   popoverMode = "percentile";
   fillPopover(popover, "spark-popover-title", "spark-popover-body",
     shortMachine(machineKey) + " — " + label,
-    makePercentileSvg(320, 120, pct, { labeled: true }));
+    makePercentileChart(pct, { labeled: true }));
   popover2.hidden = true;
   popover2.classList.remove("show");
   popover.hidden = false;
@@ -824,13 +1054,170 @@ function makeSparkSvg(w, h, points, color, opts) {
   return svg;
 }
 
+function makeMultiSparkSvg(w, h, seriesList, opts) {
+  opts = opts || {};
+  var showDots = opts.showDots;
+  var labeled = opts.labeled;
+  var yUnit = opts.yUnit || "GiB/s";
+  var xLabel = opts.xLabel || "Date";
+  var timelineDays = opts.timelineDays || 0;
+
+  var pad = labeled
+    ? { t: 10, r: 14, b: timelineDays ? 72 : 64, l: 52 }
+    : { t: 4, r: 3, b: 4, l: 3 };
+  var plotW = w - pad.l - pad.r;
+  var plotH = h - pad.t - pad.b;
+  var plotL = pad.l;
+  var plotT = pad.t;
+  var plotB = pad.t + plotH;
+
+  var vals = [];
+  seriesList.forEach(function(s) {
+    s.points.forEach(function(p) {
+      if (p.v != null) vals.push(p.v);
+    });
+  });
+  if (!vals.length) {
+    var empty = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    empty.setAttribute("width", w);
+    empty.setAttribute("height", h);
+    return empty;
+  }
+
+  var yFixed = !!opts.yScaleLock;
+  var yMin;
+  var yMax;
+  if (yFixed) {
+    yMin = opts.yMin;
+    yMax = opts.yMax;
+  } else {
+    var dataMin = Math.min.apply(null, vals);
+    var dataMax = Math.max.apply(null, vals);
+    var mid = (dataMin + dataMax) / 2;
+    var span = dataMax - dataMin;
+    var minSpan = Math.max(Math.abs(mid) * 0.1, 1e-9);
+    if (span < minSpan) {
+      yMin = mid - minSpan / 2;
+      yMax = mid + minSpan / 2;
+    } else {
+      yMin = dataMin;
+      yMax = dataMax;
+      var yPad = span * 0.08 || 0.1;
+      yMin -= yPad;
+      yMax += yPad;
+    }
+  }
+  var axisSpan = yMax - yMin;
+
+  var refPoints = seriesList[0].points;
+  var n = refPoints.length;
+  var xAt = function(i) {
+    if (n === 1) return plotL + plotW / 2;
+    return plotL + (i / (n - 1)) * plotW;
+  };
+  var yAt = function(v) {
+    var frac = (v - yMin) / (yMax - yMin);
+    if (yFixed) frac = Math.max(0, Math.min(1, frac));
+    return plotT + plotH - frac * plotH;
+  };
+
+  var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("width", w);
+  svg.setAttribute("height", h);
+  svg.setAttribute("viewBox", "0 0 " + w + " " + h);
+
+  if (labeled) {
+    var axis = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    axis.setAttribute("d", "M" + plotL + "," + plotT + " L" + plotL + "," + plotB + " L" + (plotL + plotW) + "," + plotB);
+    axis.setAttribute("stroke", "#999");
+    axis.setAttribute("stroke-width", "1");
+    axis.setAttribute("fill", "none");
+    svg.appendChild(axis);
+
+    var yTickValues = yFixed && opts.yTicks
+      ? opts.yTicks
+      : [0, 0.5, 1].map(function(frac) { return yMax - frac * (yMax - yMin); });
+    yTickValues.forEach(function(v) {
+      var y = yAt(v);
+      var grid = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      grid.setAttribute("x1", plotL);
+      grid.setAttribute("x2", plotL + plotW);
+      grid.setAttribute("y1", y);
+      grid.setAttribute("y2", y);
+      grid.setAttribute("stroke", "#eee");
+      grid.setAttribute("stroke-width", "1");
+      svg.appendChild(grid);
+      svgText(svg, plotL - 6, y + 3, fmtSparkY(v, yUnit, axisSpan), { anchor: "end", size: "9" });
+    });
+
+    var yTitle = svgText(svg, 14, plotT + plotH / 2, yUnit, { size: "10", fill: "#666", anchor: "middle" });
+    yTitle.setAttribute("transform", "rotate(-90 14 " + (plotT + plotH / 2) + ")");
+
+    var xIdx = timelineDays
+      ? refPoints.map(function(_, i) { return i; })
+      : n <= 7
+        ? refPoints.map(function(_, i) { return i; })
+        : [0, Math.floor((n - 1) / 2), n - 1];
+    xIdx.forEach(function(i) {
+      var tx = xAt(i);
+      var ty = plotB + 6;
+      svgText(svg, tx, ty, sparkXDateLabel(refPoints[i].day, n), { anchor: "end", size: "8", rotate: -45 });
+    });
+    svgText(svg, plotL + plotW / 2, h - 4, xLabel, { anchor: "middle", size: "10", fill: "#666" });
+  }
+
+  seriesList.forEach(function(s) {
+    var dataCoords = [];
+    s.points.forEach(function(p, i) {
+      if (p.v != null) dataCoords.push({ x: xAt(i), y: yAt(p.v), i: i });
+    });
+
+    var segments = [];
+    var current = [];
+    dataCoords.forEach(function(c, idx) {
+      if (!idx || c.i - dataCoords[idx - 1].i === 1) {
+        current.push(c);
+      } else {
+        if (current.length) segments.push(current);
+        current = [c];
+      }
+    });
+    if (current.length) segments.push(current);
+
+    segments.forEach(function(seg) {
+      if (seg.length > 1) {
+        var line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+        line.setAttribute("points", seg.map(function(c) { return c.x + "," + c.y; }).join(" "));
+        line.setAttribute("stroke", s.color);
+        line.setAttribute("stroke-width", showDots ? "2" : "1.5");
+        line.setAttribute("fill", "none");
+        if (s.dash) line.setAttribute("stroke-dasharray", s.dash);
+        svg.appendChild(line);
+      }
+    });
+
+    if (showDots || dataCoords.length === 1) {
+      dataCoords.forEach(function(c) {
+        var dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        dot.setAttribute("cx", c.x);
+        dot.setAttribute("cy", c.y);
+        dot.setAttribute("r", "3");
+        dot.setAttribute("fill", s.color);
+        svg.appendChild(dot);
+      });
+    }
+  });
+
+  return svg;
+}
+
 function perCacheLineNs(passNs) {
   return passNs / CACHE_LINES_PER_GI;
 }
 
 function hasMachineData(m) {
   return TABLE.some(function(sec) {
-    return sec.rows.some(function(row) { return m.ops[row.key]; });
+    return sec.rows.some(function(row) { return hasOp(m, row.key); });
   });
 }
 
@@ -856,50 +1243,88 @@ function partitionByCloud(machines) {
   return { gcp: gcp, aws: aws, other: other };
 }
 
-function buildCloudGrid(container, list, labelFn, state, onSelect) {
-  container.innerHTML = "";
-  var grid = document.createElement("div");
-  grid.className = "picker-grid";
-  list.forEach(function(key) {
-    grid.appendChild(makePickerCell(labelFn(key), key, state, onSelect));
-  });
-  container.appendChild(grid);
+function gcpVcpuTier(id) {
+  var m = id.match(/standard-(\d+)/);
+  return m ? parseInt(m[1], 10) : 0;
 }
 
-function positionPickerMenu(menu) {
-  var bar = document.getElementById("picker-trigger");
-  var r = bar.getBoundingClientRect();
-  menu.style.top = (r.bottom + 6) + "px";
-  menu.style.left = (r.left + r.width / 2) + "px";
+function awsSizeTier(id) {
+  var m = id.match(/\.(\d+)xlarge$/);
+  return m ? parseInt(m[1], 10) : 0;
+}
+
+function groupByTier(list, tierFn) {
+  var groups = {};
+  list.forEach(function(key) {
+    var tier = tierFn(key);
+    if (!groups[tier]) groups[tier] = [];
+    groups[tier].push(key);
+  });
+  return groups;
+}
+
+function uniqueTiers(list, tierFn) {
+  var seen = {};
+  list.forEach(function(key) {
+    var tier = tierFn(key);
+    if (tier > 0) seen[tier] = true;
+  });
+  return Object.keys(seen).map(function(t) { return parseInt(t, 10); }).sort(function(a, b) { return a - b; });
+}
+
+function buildSizeColumns(container, list, tiers, tierFn, labelFn, state, onSelect) {
+  var row = document.createElement("div");
+  row.className = "picker-lattice-row cols-" + tiers.length;
+  var byTier = groupByTier(list, tierFn);
+  tiers.forEach(function(tier) {
+    var col = document.createElement("div");
+    col.className = "picker-lattice-col";
+    (byTier[tier] || []).sort().forEach(function(key) {
+      col.appendChild(makePickerCell(labelFn(key), key, state, onSelect));
+    });
+    row.appendChild(col);
+  });
+  container.appendChild(row);
+}
+
+function buildPickerLattice(container, parts, state, onSelect) {
+  if (!container) return;
+  container.innerHTML = "";
+  if (parts.gcp.length) {
+    var gcpHeading = document.createElement("div");
+    gcpHeading.className = "picker-section";
+    gcpHeading.textContent = "GCP";
+    container.appendChild(gcpHeading);
+    buildSizeColumns(container, parts.gcp, uniqueTiers(parts.gcp, gcpVcpuTier), gcpVcpuTier, shortMachine, state, onSelect);
+  }
+  if (parts.aws.length) {
+    var awsHeading = document.createElement("div");
+    awsHeading.className = "picker-section";
+    awsHeading.textContent = "AWS";
+    container.appendChild(awsHeading);
+    buildSizeColumns(container, parts.aws, uniqueTiers(parts.aws, awsSizeTier), awsSizeTier, shortAws, state, onSelect);
+  }
 }
 
 function setPickerOpen(menu, toggle, open) {
   menu.classList.toggle("open", open);
   toggle.setAttribute("aria-expanded", open ? "true" : "false");
-  if (open) positionPickerMenu(menu);
 }
 
 function initMachinePicker(machines, state, onSelect) {
   var picker = document.getElementById("machine-picker");
-  var toggle = document.getElementById("picker-toggle");
+  var trigger = document.getElementById("picker-trigger");
   var menu = document.getElementById("picker-menu");
-  var gridGcp = document.getElementById("picker-grid-gcp");
-  var gridAws = document.getElementById("picker-grid-aws");
+  var lattice = document.getElementById("picker-lattice");
   var listOther = document.getElementById("picker-list-other");
-  var gcpHeading = document.getElementById("picker-gcp-heading");
-  var awsHeading = document.getElementById("picker-aws-heading");
   var otherHeading = document.getElementById("picker-other-heading");
+  if (!picker || !trigger || !menu || !lattice || !listOther || !otherHeading) return;
 
   listOther.innerHTML = "";
   var parts = partitionByCloud(machines);
 
-  buildCloudGrid(gridGcp, parts.gcp, shortMachine, state, onSelect);
-  buildCloudGrid(gridAws, parts.aws, shortAws, state, onSelect);
-
-  gcpHeading.hidden = !parts.gcp.length;
-  gridGcp.hidden = !parts.gcp.length;
-  awsHeading.hidden = !parts.aws.length;
-  gridAws.hidden = !parts.aws.length;
+  buildPickerLattice(lattice, parts, state, onSelect);
+  lattice.hidden = !parts.gcp.length && !parts.aws.length;
 
   if (parts.other.length) {
     otherHeading.hidden = false;
@@ -912,18 +1337,14 @@ function initMachinePicker(machines, state, onSelect) {
 
   setPickerLabel(state.selected);
 
-  toggle.addEventListener("click", function(e) {
+  trigger.addEventListener("click", function(e) {
     e.stopPropagation();
-    setPickerOpen(menu, toggle, !menu.classList.contains("open"));
+    setPickerOpen(menu, trigger, !menu.classList.contains("open"));
   });
 
   document.addEventListener("mousedown", function(e) {
     if (!menu.classList.contains("open")) return;
-    if (!picker.contains(e.target)) setPickerOpen(menu, toggle, false);
-  });
-
-  window.addEventListener("resize", function() {
-    if (menu.classList.contains("open")) positionPickerMenu(menu);
+    if (!picker.contains(e.target)) setPickerOpen(menu, trigger, false);
   });
 }
 
@@ -973,6 +1394,180 @@ function updatePickerActiveFromState(state) {
     row.classList.toggle("active", on);
     var box = row.querySelector(".picker-check");
     if (box) box.checked = on;
+  });
+}
+
+function sectionSlug(title) {
+  return "sec-" + title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+function tocLabel(title) {
+  return title.replace(/\s*\([^)]*\)\s*$/, "").trim();
+}
+
+function tocGroup(title) {
+  var base = tocLabel(title);
+  var comma = base.indexOf(",");
+  if (comma >= 0) return base.slice(0, comma).trim();
+
+  var tag = (title.match(/\(([^)]+)\)\s*$/) || [])[1];
+  if (tag === "bincode" || tag === "JSON" || tag === "LZ4") return tag;
+
+  return base;
+}
+
+function tocGroups(m) {
+  var groups = [];
+  var seen = {};
+  TABLE.forEach(function(sec) {
+    var present = sec.rows.some(function(row) { return hasOp(m, row.key); });
+    if (!present) return;
+    var label = tocGroup(sec.title);
+    var sectionId = sectionSlug(sec.title);
+    if (!seen[label]) {
+      seen[label] = { label: label, sectionId: sectionId, sectionIds: [sectionId] };
+      groups.push(seen[label]);
+    } else {
+      seen[label].sectionIds.push(sectionId);
+    }
+  });
+  return groups;
+}
+
+var tocSpyBound = false;
+
+function ensureTocSpy() {
+  if (tocSpyBound) return;
+  tocSpyBound = true;
+  window.addEventListener("scroll", syncTocActive, { passive: true });
+}
+
+function sectionHead(tbody) {
+  if (!tbody) return null;
+  return tbody.querySelector(".section-head") || tbody.rows[0] || null;
+}
+
+function tocMarkerY() {
+  var v = getComputedStyle(document.documentElement).getPropertyValue("--scroll-marker-y");
+  return v ? parseFloat(v) : 96;
+}
+
+function contentBandTop() {
+  var header = document.querySelector(".page-header");
+  if (!header) return tocMarkerY();
+  return header.getBoundingClientRect().bottom;
+}
+
+function sectionInContentBand(tbody) {
+  var rect = tbody.getBoundingClientRect();
+  var top = contentBandTop();
+  return rect.bottom > top && rect.top < window.innerHeight;
+}
+
+function visibleSectionIds() {
+  var ids = [];
+  document.querySelectorAll("#bench-table tbody[id]").forEach(function(tbody) {
+    if (sectionInContentBand(tbody)) ids.push(tbody.id);
+  });
+  return ids;
+}
+
+function updateStickyChrome() {
+  var header = document.querySelector(".page-header");
+  if (!header) return;
+  var chromeTop = header.offsetHeight;
+  document.documentElement.style.setProperty("--sticky-chrome-top", chromeTop + "px");
+  document.documentElement.style.setProperty("--scroll-marker-y", chromeTop + "px");
+  updateTocIndicator();
+}
+
+function tocMarkerSlack() {
+  return 12;
+}
+
+function sectionDocTop(el) {
+  return el.getBoundingClientRect().top + window.pageYOffset;
+}
+
+function scrollToSection(tbody) {
+  var head = sectionHead(tbody) || tbody;
+  var y = Math.max(0, Math.round(sectionDocTop(head) - contentBandTop() - tocMarkerSlack()));
+  window.scrollTo(0, y);
+}
+
+function updateTocIndicator() {
+  var nav = document.getElementById("bench-toc");
+  var bar = document.getElementById("bench-toc-indicator");
+  if (!nav || !bar || nav.hidden) return;
+
+  var visible = {};
+  visibleSectionIds().forEach(function(id) { visible[id] = true; });
+
+  var showing = [];
+  nav.querySelectorAll("a[data-section-ids]").forEach(function(a) {
+    var ids = a.dataset.sectionIds.split(" ");
+    for (var i = 0; i < ids.length; i++) {
+      if (visible[ids[i]]) {
+        showing.push(a);
+        break;
+      }
+    }
+  });
+
+  if (!showing.length) {
+    bar.hidden = true;
+    return;
+  }
+
+  var top = showing[0].offsetTop;
+  var last = showing[showing.length - 1];
+  bar.style.top = top + "px";
+  bar.style.height = (last.offsetTop + last.offsetHeight - top) + "px";
+  bar.hidden = false;
+}
+
+var tocSpyBound = false;
+
+function ensureTocIndicator(nav) {
+  if (!nav) return;
+  if (!document.getElementById("bench-toc-indicator")) {
+    var bar = document.createElement("div");
+    bar.id = "bench-toc-indicator";
+    bar.className = "page-toc-indicator";
+    bar.hidden = true;
+    nav.appendChild(bar);
+  }
+}
+
+function syncTocActive() {
+  updateTocIndicator();
+}
+
+function renderToc(m, nav) {
+  var stack = document.querySelector(".page-stack");
+  if (!nav) return;
+  nav.innerHTML = "";
+  var groups = tocGroups(m);
+  groups.forEach(function(g) {
+    var a = document.createElement("a");
+    a.href = "#" + g.sectionId;
+    a.dataset.sectionIds = g.sectionIds.join(" ");
+    a.textContent = g.label;
+    a.addEventListener("click", function(e) {
+      e.preventDefault();
+      hidePopover();
+      var tbody = document.getElementById(g.sectionId);
+      if (tbody) scrollToSection(tbody);
+    });
+    nav.appendChild(a);
+  });
+  nav.hidden = groups.length === 0;
+  ensureTocIndicator(nav);
+  if (stack) stack.classList.toggle("has-toc", groups.length > 0);
+  ensureTocSpy();
+  requestAnimationFrame(function() {
+    syncTocActive();
+    updateTocIndicator();
   });
 }
 
@@ -1034,4 +1629,20 @@ function fmtTime(secs) {
   if (secs >= 1) return (secs >= 60 ? (secs / 60).toFixed(0) + "m" : secs.toFixed(0) + " s");
   if (secs >= 0.001) return (secs * 1000).toFixed(0) + " ms";
   return (secs * 1e6).toFixed(0) + " μs";
+}
+
+if (window.__NAPKIN_DATA__ && Array.isArray(window.__NAPKIN_DATA__.rows)) {
+  boot(window.__NAPKIN_DATA__.rows, window.__NAPKIN_DATA__.changelog);
+} else {
+  Promise.all([
+    fetch("data/data.csv", { cache: "no-store" }).then(function(r) {
+      if (!r.ok) throw new Error("data.csv HTTP " + r.status);
+      return r.text();
+    }),
+    fetch("data/changelog.json", { cache: "no-store" })
+      .then(function(r) { return r.ok ? r.json() : []; })
+      .catch(function() { return []; })
+  ]).then(function(res) {
+    boot(parseCSV(res[0]), res[1]);
+  }).catch(fail);
 }
