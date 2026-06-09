@@ -1,0 +1,79 @@
+name: Nightly Benchmarks
+
+# Checkout gh-pages for code + data + site. Workflow file lives on master (schedule fires from default branch).
+# Runs GCP + AWS daily fleets, publishes to gh-pages.
+# Secrets: GCP_SA_KEY, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SSH_PRIVATE_KEY
+
+on:
+  schedule:
+    - cron: "0 10 * * *" # 10:00 UTC = 03:00 America/Los_Angeles (PDT)
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nightly-bench
+  cancel-in-progress: false
+
+env:
+  GCP_ZONE: ${{ vars.GCP_ZONE || 'us-east1-b' }}
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-2' }}
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout gh-pages (code + data + site)
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ vars.GCP_PROJECT }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install AWS SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.AWS_SSH_PRIVATE_KEY }}" > ~/.ssh/napkin-bench.pem
+          chmod 600 ~/.ssh/napkin-bench.pem
+
+      - name: Run GCP + AWS fleets
+        env:
+          CLOUDSDK_CORE_DISABLE_PROMPTS: "1"
+          AWS_KEY_FILE: ~/.ssh/napkin-bench.pem
+        run: |
+          set -euo pipefail
+          : > data/dead.csv
+          NAPKIN_GCP_ZONE="$GCP_ZONE" bash machines/bench-gcp-fleet.sh
+          bash machines/bench-aws-fleet.sh
+
+      - name: Publish results
+        run: |
+          set -euo pipefail
+          TODAY=$(date -u +%Y-%m-%d)
+          {
+            echo 'date,machine,cpu,config,operation,latency_ns,throughput_bytes_s,commit'
+            cat data/dead.csv
+          } > "data/${TODAY}.csv"
+          python3 scripts/publish.py
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/ index.html
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "bench: ${TODAY} results"
+          git push
