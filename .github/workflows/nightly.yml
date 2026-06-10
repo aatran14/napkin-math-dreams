@@ -64,7 +64,7 @@ jobs:
           cp -f site/data/*.csv data/ 2>/dev/null || true
           cp -f site/data/changelog.json data/ 2>/dev/null || true
 
-      - name: Run GCP + AWS fleets
+      - name: Run GCP + AWS fleets (compute + same-zone network)
         env:
           CLOUDSDK_CORE_DISABLE_PROMPTS: "1" # don't block on ssh-key prompts in CI
           AWS_KEY_FILE: ~/.ssh/napkin-bench.pem
@@ -73,6 +73,10 @@ jobs:
           : > data/dead.csv   # capture only this run's rows
           NAPKIN_GCP_ZONE="$GCP_ZONE" bash machines/bench-gcp-fleet.sh
           bash machines/bench-aws-fleet.sh
+          # same-zone network: one matched VM pair per cloud (NIC is identical across
+          # c4/c4d/c4a, so one pair suffices). Appends network_same_zone* rows to dead.csv.
+          NAPKIN_GCP_ZONE="$GCP_ZONE" bash machines/bench-net-fleet-gcp.sh c4-standard-16-lssd
+          bash machines/bench-net-fleet-aws.sh c7i.12xlarge
 
       - name: Publish results to gh-pages
         run: |
