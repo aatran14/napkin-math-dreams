@@ -10,48 +10,114 @@ type Int = u64;
 
 const BUFFER_BYTES: usize = 1024 * 1024 * 1024;
 
-/*
-We aim to measure DRAM bandwidth. To do this we must 
-- measure the time it takes to read
-- measure the time it takes to write
-
-the standard convention is that these operations are the same.
-Even sirupsen/napkin-math measures only the read path, but for 
-but for even more transparency, memory.rs perform both R/W throughput
-
-R/W is difficult to isolate on memory because of the cache layer.
-This demands a method to either exhaust the cache 
-
-
+/* 
+Sequential read/write: warm streaming bandwidth (sirupsen/napkin-math style).
+Each core reads/writes its own slice with affinity pinned; timed passes do not
+flush cache, so throughput reflects what the machine can sustain from memory.
 */
-// Sequential read/write: separate experiments. Each timed sample flushes cache,
-// then measures only the pass time (read or write), so throughput ≈ DRAM ceiling.
+
+/* Single-thread: one core scans a 1 GiB buffer in a tight loop for 10s.
+Reports sustained read bandwidth (GiB/s), not per-cache-line latency.
+latency_ns is wall time for one full pass; throughput = BUFFER_BYTES / that time.
+*/
 
 pub fn seq_read_single() -> Measurement {
     let n = BUFFER_BYTES / 8;
     let vec: Vec<Int> = (0..n).map(|i| i as Int).collect();
-    let (ns_per_pass, throughput) = measure_cold_passes(BUFFER_BYTES, 10, || {
-        unsafe { flush_cache(&vec) };
-        let t = Instant::now();
+    crate::benchmarks::bench("seq_mem_read_single", BUFFER_BYTES, 10, || {
         black_box(memory_read_vectorized(&vec));
-        t.elapsed()
-    });
-    Measurement {
-        name: "seq_mem_read_single",
-        latency_ns: Some(ns_per_pass),
-        throughput_bytes_s: Some(throughput),
+    })
+}
+
+/* 
+Multi-thread: one pinned thread per physical core (lowest sibling in each HT set),
+each scanning its slice of the same 1 GiB.
+Barriers keep passes in lockstep; wall time is one full parallel sweep. Throughput is
+aggregate bandwidth (all cores combined), same units as single-thread.
+*/
+fn physical_core_ids() -> Vec<core_affinity::CoreId> {
+    let available: std::collections::HashSet<usize> = core_affinity::get_core_ids()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|c| c.id)
+        .collect();
+
+    #[cfg(target_os = "linux")]
+    let mut physical: Vec<core_affinity::CoreId> = physical_core_ids_linux()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|c| available.contains(&c.id))
+        .collect();
+
+    #[cfg(not(target_os = "linux"))]
+    let mut physical: Vec<core_affinity::CoreId> = Vec::new();
+
+    if physical.is_empty() {
+        physical = available.into_iter().map(|id| core_affinity::CoreId { id }).collect();
     }
+    physical.sort_by_key(|c| c.id);
+    physical
+}
+
+#[cfg(target_os = "linux")]
+fn physical_core_ids_linux() -> Option<Vec<core_affinity::CoreId>> {
+    use std::collections::BTreeSet;
+    use std::fs;
+
+    let cpu_dir = fs::read_dir("/sys/devices/system/cpu").ok()?;
+    let mut sibling_sets: BTreeSet<Vec<u32>> = BTreeSet::new();
+
+    for entry in cpu_dir.flatten() {
+        let siblings_path = entry.path().join("topology/thread_siblings_list");
+        let contents = fs::read_to_string(&siblings_path).ok()?;
+        let mut cpus = parse_thread_siblings(&contents);
+        if cpus.is_empty() {
+            continue;
+        }
+        cpus.sort_unstable();
+        cpus.dedup();
+        sibling_sets.insert(cpus);
+    }
+
+    if sibling_sets.is_empty() {
+        return None;
+    }
+
+    Some(
+        sibling_sets
+            .into_iter()
+            .filter_map(|sibs| sibs.first().copied())
+            .map(|id| core_affinity::CoreId { id: id as usize })
+            .collect(),
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn parse_thread_siblings(s: &str) -> Vec<u32> {
+    let mut cpus = Vec::new();
+    for part in s.split(',') {
+        let part = part.trim();
+        if part.is_empty() {
+            continue;
+        }
+        if let Some((lo, hi)) = part.split_once('-') {
+            let lo: u32 = lo.trim().parse().unwrap_or(0);
+            let hi: u32 = hi.trim().parse().unwrap_or(lo);
+            for id in lo..=hi {
+                cpus.push(id);
+            }
+        } else if let Ok(id) = part.parse() {
+            cpus.push(id);
+        }
+    }
+    cpus
 }
 
 pub fn seq_read_threaded() -> Measurement {
     let n = BUFFER_BYTES / 8;
-    let core_ids = core_affinity::get_core_ids().unwrap_or_default();
+    let core_ids = physical_core_ids();
     let num_threads = core_ids.len().max(1);
     let slice_size = n / num_threads;
-    // One 1 GiB buffer, split across cores (Simon-style). Flush the whole buffer on
-    // the main thread before each pass so workers only time the read, and we evict
-    // all lines — not just each core's ~128 MiB slice (which can stay in L3).
-    let shared = Arc::new((0..n).map(|i| i as Int).collect::<Vec<Int>>());
 
     let start_barrier = Arc::new(Barrier::new(num_threads + 1));
     let end_barrier = Arc::new(Barrier::new(num_threads + 1));
@@ -63,16 +129,17 @@ pub fn seq_read_threaded() -> Measurement {
         let end_b = end_barrier.clone();
         let done_alloc = done_allocating.clone();
         let done = done.clone();
-        let vec = shared.clone();
+
+        let range_start = slice_size * idx;
+        let range_end_exclusive = if idx + 1 == num_threads {
+            n
+        } else {
+            range_start + slice_size
+        };
+        let vec: Vec<Int> = (range_start..range_end_exclusive).map(|i| i as Int).collect();
 
         thread::spawn(move || {
             core_affinity::set_for_current(core);
-            let range_start = slice_size * idx;
-            let range_end = if idx + 1 == num_threads {
-                n
-            } else {
-                range_start + slice_size
-            };
 
             done_alloc.wait();
             loop {
@@ -80,7 +147,7 @@ pub fn seq_read_threaded() -> Measurement {
                 if done.load(Ordering::Relaxed) {
                     return;
                 }
-                black_box(memory_read_vectorized(&vec[range_start..range_end]));
+                black_box(memory_read_vectorized(&vec));
                 end_b.wait();
             }
         });
@@ -88,11 +155,17 @@ pub fn seq_read_threaded() -> Measurement {
 
     done_allocating.wait();
 
+    let warmup = Duration::from_secs(1);
+    let t = Instant::now();
+    while t.elapsed() < warmup {
+        start_barrier.wait();
+        end_barrier.wait();
+    }
+
     let duration = Duration::from_secs(10);
     let t = Instant::now();
     let mut iters: u64 = 0;
     while t.elapsed() < duration {
-        unsafe { flush_cache(shared.as_ref()) };
         start_barrier.wait();
         end_barrier.wait();
         iters += 1;
@@ -111,29 +184,25 @@ pub fn seq_read_threaded() -> Measurement {
     }
 }
 
+// single threaded susatined write bandwidth.
+// this is one core repeatedlly writing 1GiB buffer for 10 seconds. in the run, this  occurs after a 1second warmup.
+// each iteration scans the whole buffer with vectorized stores 
+// black_box(vec[0]) is a dummy read to stop the compiler form dropping the work. (maybe this could be better, but i'm too dumb to make it complicated).
+// the result is Throughput = 1GiB divided by the average pass time.
 pub fn seq_write_single() -> Measurement {
     let n = BUFFER_BYTES / 8;
     let mut vec: Vec<Int> = (0..n).map(|i| i as Int).collect();
-    let (ns_per_pass, throughput) = measure_cold_passes(BUFFER_BYTES, 10, || {
-        unsafe { flush_cache(&vec) };
-        let t = Instant::now();
+    crate::benchmarks::bench("seq_mem_write_single", BUFFER_BYTES, 10, || {
         memory_write_vectorized(&mut vec);
         black_box(vec[0]);
-        t.elapsed()
-    });
-    Measurement {
-        name: "seq_mem_write_single",
-        latency_ns: Some(ns_per_pass),
-        throughput_bytes_s: Some(throughput),
-    }
+    })
 }
 
 pub fn seq_write_threaded() -> Measurement {
     let n = BUFFER_BYTES / 8;
-    let core_ids = core_affinity::get_core_ids().unwrap_or_default();
+    let core_ids = physical_core_ids();
     let num_threads = core_ids.len().max(1);
     let slice_size = n / num_threads;
-    let shared = Arc::new((0..n).map(|i| i as Int).collect::<Vec<Int>>());
 
     let start_barrier = Arc::new(Barrier::new(num_threads + 1));
     let end_barrier = Arc::new(Barrier::new(num_threads + 1));
@@ -145,16 +214,17 @@ pub fn seq_write_threaded() -> Measurement {
         let end_b = end_barrier.clone();
         let done_alloc = done_allocating.clone();
         let done = done.clone();
-        let vec = shared.clone();
+
+        let range_start = slice_size * idx;
+        let range_end_exclusive = if idx + 1 == num_threads {
+            n
+        } else {
+            range_start + slice_size
+        };
+        let mut vec: Vec<Int> = (range_start..range_end_exclusive).map(|i| i as Int).collect();
 
         thread::spawn(move || {
             core_affinity::set_for_current(core);
-            let range_start = slice_size * idx;
-            let range_end = if idx + 1 == num_threads {
-                n
-            } else {
-                range_start + slice_size
-            };
 
             done_alloc.wait();
             loop {
@@ -162,15 +232,8 @@ pub fn seq_write_threaded() -> Measurement {
                 if done.load(Ordering::Relaxed) {
                     return;
                 }
-                // SAFETY: each thread writes a disjoint sub-slice of the shared vec.
-                let slice = unsafe {
-                    std::slice::from_raw_parts_mut(
-                        vec.as_ptr().add(range_start) as *mut Int,
-                        range_end - range_start,
-                    )
-                };
-                memory_write_vectorized(slice);
-                black_box(slice[0]);
+                memory_write_vectorized(&mut vec);
+                black_box(vec[0]);
                 end_b.wait();
             }
         });
@@ -178,11 +241,17 @@ pub fn seq_write_threaded() -> Measurement {
 
     done_allocating.wait();
 
+    let warmup = Duration::from_secs(1);
+    let t = Instant::now();
+    while t.elapsed() < warmup {
+        start_barrier.wait();
+        end_barrier.wait();
+    }
+
     let duration = Duration::from_secs(10);
     let t = Instant::now();
     let mut iters: u64 = 0;
     while t.elapsed() < duration {
-        unsafe { flush_cache(shared.as_ref()) };
         start_barrier.wait();
         end_barrier.wait();
         iters += 1;
@@ -201,21 +270,59 @@ pub fn seq_write_threaded() -> Measurement {
     }
 }
 
-pub fn random_read() -> Measurement {
-    let bytes_per_iter: usize = 64;
-    let n = BUFFER_BYTES / bytes_per_iter;
-    let vec: Vec<[u64; 8]> = (0..n).map(|i| [i as u64; 8]).collect();
+/*
+Random read/write: per 64-byte cache-line latency over a 1 GiB buffer.
+Access order is shuffled once; each timed op touches one line (read or store).
+Reports ns/access (latency_ns) and derived MiB/s from 64 / latency.
+*/
 
+struct RandomWalk {
+    vec: Vec<[u64; 8]>,
+    order: Vec<usize>,
+    i: usize,
+}
+
+fn random_walk_setup() -> RandomWalk {
+    let n = BUFFER_BYTES / 64;
+    let mut vec: Vec<[u64; 8]> = vec![[1, 2, 3, 4, 5, 6, 7, 8]; n];
+    unsafe {
+        libc::madvise(
+            vec.as_mut_ptr() as *mut libc::c_void,
+            n * std::mem::size_of::<[u64; 8]>(),
+            libc::MADV_RANDOM,
+        );
+    }
     let mut order: Vec<usize> = (0..n).collect();
     order.shuffle(&mut thread_rng());
-    let mut i = 0usize;
+    RandomWalk { vec, order, i: 0 }
+}
 
-    crate::benchmarks::bench("mem_random_rw", bytes_per_iter, 5, || {
-        black_box(vec[order[i]]);
-        i += 1;
-        if i >= order.len() {
-            i = 0;
-        }
+fn random_walk_next(w: &mut RandomWalk) -> usize {
+    let idx = w.order[w.i];
+    w.i += 1;
+    if w.i >= w.order.len() {
+        w.i = 0;
+    }
+    idx
+}
+
+pub fn random_read() -> Measurement {
+    let bytes_per_iter = 64;
+    let mut walk = random_walk_setup();
+    crate::benchmarks::bench("mem_random_read", bytes_per_iter, 5, || {
+        let idx = random_walk_next(&mut walk);
+        black_box(walk.vec[idx]);
+    })
+}
+
+pub fn random_write() -> Measurement {
+    let bytes_per_iter = 64;
+    let mut walk = random_walk_setup();
+    const WRITE_PATTERN: [u64; 8] = [8, 7, 6, 5, 4, 3, 2, 1];
+    crate::benchmarks::bench("mem_random_write", bytes_per_iter, 5, || {
+        let idx = random_walk_next(&mut walk);
+        walk.vec[idx] = WRITE_PATTERN;
+        black_box(walk.vec[idx]);
     })
 }
 
@@ -226,59 +333,8 @@ pub fn run() -> Vec<Measurement> {
         seq_write_single(),
         seq_write_threaded(),
         random_read(),
+        random_write(),
     ]
-}
-
-fn measure_cold_passes<F>(size_bytes: usize, duration_secs: u64, mut pass: F) -> (f64, f64)
-where
-    F: FnMut() -> Duration,
-{
-    let deadline = Instant::now() + Duration::from_secs(duration_secs);
-    let mut pass_ns: u128 = 0;
-    let mut samples: u64 = 0;
-    while Instant::now() < deadline {
-        pass_ns += pass().as_nanos() as u128;
-        samples += 1;
-    }
-    let ns_per_pass = pass_ns as f64 / samples as f64;
-    let throughput = size_bytes as f64 / (ns_per_pass / 1e9);
-    (ns_per_pass, throughput)
-}
-
-// Evict buffer from cache so the next pass measures DRAM, not L3.
-unsafe fn flush_cache(data: &[Int]) {
-    let ptr = data.as_ptr() as *const u8;
-    let len = data.len() * 8;
-    let mut offset = 0usize;
-
-    while offset < len {
-        #[cfg(target_arch = "x86_64")]
-        std::arch::asm!(
-            "clflushopt [{addr}]",
-            addr = in(reg) ptr.add(offset),
-            options(nostack, preserves_flags),
-        );
-
-        #[cfg(target_arch = "aarch64")]
-        std::arch::asm!(
-            "dc civac, {addr}",
-            addr = in(reg) ptr.add(offset),
-            options(nostack, preserves_flags),
-        );
-
-        #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-        {
-            let _ = ptr.add(offset);
-        }
-
-        offset += 64;
-    }
-
-    #[cfg(target_arch = "x86_64")]
-    std::arch::asm!("mfence", options(nostack, preserves_flags));
-
-    #[cfg(target_arch = "aarch64")]
-    std::arch::asm!("dsb sy", options(nostack, preserves_flags));
 }
 
 #[inline(never)]
