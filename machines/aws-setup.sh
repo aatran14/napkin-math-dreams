@@ -35,9 +35,22 @@ else
   echo "created: $SG_ID"
 fi
 
+## am i dumb
+# echo "=== allowing iperf3 (tcp/5201) within security group ==="
+# if aws ec2 authorize-security-group-ingress --region "$REGION" \
+#   --group-id "$SG_ID" \
+#   --protocol tcp --port 5201 --source-group "$SG_ID" 2>/dev/null; then
+#   echo "  iperf3 rule: applied"
+# else
+#   echo "  iperf3 rule: already present"
+# fi
+
+
 echo ""
 echo "=== done ==="
 echo "key pair:       $KEY_NAME (~/.ssh/napkin-bench.pem)"
 echo "security group: $SG_NAME ($SG_ID)"
 echo ""
-echo "you can now run: ./machines/bench-aws.sh c7i.4xlarge"
+echo "you can now run:"
+echo "  ./machines/bench-aws.sh c7i.4xlarge"
+echo "  ./machines/probe-net-pair-aws.sh t3.medium"

@@ -18,6 +18,7 @@ pub fn sections() -> Vec<Section> {
                 memory::seq_write_single(),
                 memory::seq_write_threaded(),
                 memory::random_read(),
+                memory::random_write(),
             ],
         },
         Section {
