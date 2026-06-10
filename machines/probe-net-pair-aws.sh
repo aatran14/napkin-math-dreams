@@ -99,7 +99,6 @@ ssh -i "$KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o Log
 
 scp -i "$KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
   "$REPO_DIR/scripts/net-same-zone-measure.sh" \
-  "$REPO_DIR/scripts/net-same-zone-rtt.py" \
   "ubuntu@${CLI_PUB}:/tmp/"
 
 PARALLEL="${NET_PROBE_PARALLEL:-4}"

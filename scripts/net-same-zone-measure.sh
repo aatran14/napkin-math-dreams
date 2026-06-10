@@ -1,29 +1,23 @@
 #!/usr/bin/env bash
 # Run on the client VM. Server must have iperf3 -s listening on 5201.
 # Usage: net-same-zone-measure.sh <server-internal-ip> [parallel-streams]
+# iperf3 -J already reports throughput AND the kernel's RTT (TCP_INFO) in one run,
+# so there's nothing else to install or coordinate.
 set -euo pipefail
 
 SRV_IP="${1:?server internal IP}"
 PARALLEL="${2:-4}"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DURATION="${NET_PROBE_DURATION:-10}"
-RTT_SAMPLES="${NET_RTT_SAMPLES:-1000}"
 
-echo "=== network same-zone: throughput (iperf3 -P ${PARALLEL}) ==="
-iperf3 -c "$SRV_IP" -t "$DURATION" -P "$PARALLEL" | tee /tmp/iperf3-net-same-zone.out
+echo "=== network same-zone: iperf3 -P ${PARALLEL} (throughput + RTT) ==="
+iperf3 -c "$SRV_IP" -t "$DURATION" -P "$PARALLEL" -J | tee /tmp/iperf3-net-same-zone.json
 
-receiver_line=$(grep -E 'receiver|\[SUM\].*receiver' /tmp/iperf3-net-same-zone.out | tail -1 || true)
-receiver_gbit=""
-if [ -n "$receiver_line" ]; then
-  receiver_gbit=$(echo "$receiver_line" | awk '{print $(NF-1)}')
-  receiver_unit=$(echo "$receiver_line" | awk '{print $NF}')
-  echo "receiver_rate=${receiver_gbit} ${receiver_unit}"
-  echo "napkin_throughput_gbit_s=${receiver_gbit}"
-fi
-
-echo "=== network same-zone: latency (TCP connect RTT) ==="
-python3 "$SCRIPT_DIR/net-same-zone-rtt.py" "$SRV_IP" 5201 "$RTT_SAMPLES" | tee /tmp/net-same-zone-rtt.out
-p50_ns=$(grep '^p50_ns=' /tmp/net-same-zone-rtt.out | cut -d= -f2)
-p99_ns=$(grep '^p99_ns=' /tmp/net-same-zone-rtt.out | cut -d= -f2)
-[ -n "$p50_ns" ] && echo "napkin_rtt_p50_ns=${p50_ns}"
-[ -n "$p99_ns" ] && echo "napkin_rtt_p99_ns=${p99_ns}"
+python3 - /tmp/iperf3-net-same-zone.json <<'PY'
+import json, sys
+end = json.load(open(sys.argv[1]))["end"]
+print(f"napkin_throughput_gbit_s={end['sum_received']['bits_per_second'] / 1e9:.4f}")
+# iperf3 reports the kernel's smoothed RTT per stream, in microseconds.
+rtts = [s["sender"]["rtt"] for s in end["streams"] if s.get("sender", {}).get("rtt")]
+if rtts:
+    print(f"napkin_rtt_p50_ns={int(sum(rtts) / len(rtts) * 1000)}")
+PY

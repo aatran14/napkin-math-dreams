@@ -75,8 +75,8 @@ jobs:
           bash machines/bench-aws-fleet.sh
           # same-zone network: one matched VM pair per cloud (NIC is identical across
           # c4/c4d/c4a, so one pair suffices). Appends network_same_zone* rows to dead.csv.
-          NAPKIN_GCP_ZONE="$GCP_ZONE" bash machines/bench-net-fleet-gcp.sh c4-standard-16-lssd
-          bash machines/bench-net-fleet-aws.sh c7i.12xlarge
+          NAPKIN_GCP_ZONE="$GCP_ZONE" bash machines/bench-net-fleet-gcp.sh c4-standard-16-lssd || echo "::warning::GCP net probe failed; keeping compute data"
+          bash machines/bench-net-fleet-aws.sh c7i.12xlarge || echo "::warning::AWS net probe failed; keeping compute data"
 
       - name: Publish results to gh-pages
         run: |

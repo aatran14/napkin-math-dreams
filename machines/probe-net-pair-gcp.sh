@@ -66,7 +66,6 @@ gcloud compute ssh "$SRV" --zone="$ZONE" --command="
 
 gcloud compute scp --zone="$ZONE" \
   "$REPO_DIR/scripts/net-same-zone-measure.sh" \
-  "$REPO_DIR/scripts/net-same-zone-rtt.py" \
   "$CLI":/tmp/
 
 PARALLEL="${NET_PROBE_PARALLEL:-4}"
