@@ -10,14 +10,18 @@ PARALLEL="${2:-4}"
 DURATION="${NET_PROBE_DURATION:-10}"
 
 echo "=== network same-zone: iperf3 -P ${PARALLEL} (throughput + RTT) ==="
-iperf3 -c "$SRV_IP" -t "$DURATION" -P "$PARALLEL" -J | tee /tmp/iperf3-net-same-zone.json
+# iperf3 can exit non-zero on a partial run yet still emit usable JSON; parse it either way.
+iperf3 -c "$SRV_IP" -t "$DURATION" -P "$PARALLEL" -J | tee /tmp/iperf3-net-same-zone.json || true
 
 python3 - /tmp/iperf3-net-same-zone.json <<'PY'
 import json, sys
-end = json.load(open(sys.argv[1]))["end"]
-print(f"napkin_throughput_gbit_s={end['sum_received']['bits_per_second'] / 1e9:.4f}")
-# iperf3 reports the kernel's smoothed RTT per stream, in microseconds.
-rtts = [s["sender"]["rtt"] for s in end["streams"] if s.get("sender", {}).get("rtt")]
+end = json.load(open(sys.argv[1])).get("end", {})
+bits = end.get("sum_received", {}).get("bits_per_second")
+if bits:
+    print(f"napkin_throughput_gbit_s={bits / 1e9:.4f}")
+# iperf3 reports the kernel's smoothed RTT per stream, in microseconds. Best-effort.
+rtts = [s["sender"]["rtt"] for s in end.get("streams", [])
+        if isinstance(s.get("sender"), dict) and s["sender"].get("rtt")]
 if rtts:
     print(f"napkin_rtt_p50_ns={int(sum(rtts) / len(rtts) * 1000)}")
 PY
