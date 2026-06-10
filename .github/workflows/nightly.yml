@@ -1,9 +1,8 @@
 name: Nightly Benchmarks
 
-# Provisions the GCP 48-vCPU fleet (c4/c4d/c4a -standard-48-lssd), runs `daily`
-# on each, merges results, rebuilds data.csv + index.html, commits to gh-pages.
-# Auth: a service-account key (secret GCP_SA_KEY) for the napkin-math-dreams
-# project. AWS will be added as a second step once this is green.
+# Code lives on master (this branch). Site + data live on gh-pages.
+# Runs the GCP + AWS fleets from the master checkout, then publishes data + index.html to gh-pages.
+# Auth: GCP service-account key (GCP_SA_KEY) + AWS keys (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_SSH_PRIVATE_KEY).
 #
 # NOTE: must live on the DEFAULT branch (master) for the schedule to fire.
 
@@ -21,16 +20,21 @@ concurrency:
 
 env:
   GCP_ZONE: ${{ vars.GCP_ZONE || 'us-east1-b' }}
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-2' }}
 
 jobs:
   benchmark:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
     steps:
-      - name: Checkout gh-pages (code + data + site)
+      - name: Checkout master (code)
+        uses: actions/checkout@v4
+
+      - name: Checkout gh-pages (existing data + publish target)
         uses: actions/checkout@v4
         with:
           ref: gh-pages
+          path: site
 
       - id: auth
         uses: google-github-actions/auth@v2
@@ -41,14 +45,36 @@ jobs:
         with:
           project_id: ${{ vars.GCP_PROJECT }}
 
-      - name: Run GCP fleet (c4/c4d/c4a -standard-48-lssd)
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install AWS SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.AWS_SSH_PRIVATE_KEY }}" > ~/.ssh/napkin-bench.pem
+          chmod 600 ~/.ssh/napkin-bench.pem
+
+      - name: Seed historical data into the code checkout
+        run: |
+          mkdir -p data
+          cp -f site/data/*.csv data/ 2>/dev/null || true
+          cp -f site/data/changelog.json data/ 2>/dev/null || true
+
+      - name: Run GCP + AWS fleets
         env:
           CLOUDSDK_CORE_DISABLE_PROMPTS: "1" # don't block on ssh-key prompts in CI
+          AWS_KEY_FILE: ~/.ssh/napkin-bench.pem
         run: |
+          set -euo pipefail
           : > data/dead.csv   # capture only this run's rows
           NAPKIN_GCP_ZONE="$GCP_ZONE" bash machines/bench-gcp-fleet.sh
+          bash machines/bench-aws-fleet.sh
 
-      - name: Publish results
+      - name: Publish results to gh-pages
         run: |
           set -euo pipefail
           TODAY=$(date -u +%Y-%m-%d)
@@ -56,10 +82,13 @@ jobs:
             echo 'date,machine,cpu,config,operation,latency_ns,throughput_bytes_s,commit'
             cat data/dead.csv
           } > "data/${TODAY}.csv"
-          python3 scripts/publish.py
+          python3 scripts/publish.py          # reads data/ + web/ -> writes data/data.csv + index.html
+          cp -f data/*.csv site/data/
+          cp -f index.html site/index.html
+          cd site
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/ index.html
           git diff --cached --quiet && echo "No changes to commit" && exit 0
           git commit -m "bench: ${TODAY} results"
-          git push
+          git push origin gh-pages
