@@ -317,6 +317,12 @@ td input { margin-right: 4px; }
 .pct-bar-track { display: block; height: 8px; }
 .pct-chart-large .pct-bar-track { height: 10px; }
 .pct-bar { display: block; height: 100%; background: #67768e; }
+.memory-run-trend-footer {
+  margin-top: 8px;
+  font-size: 10px;
+  color: #666;
+  font-family: monospace;
+}
 .pct-footer { margin-top: 8px; font-size: 10px; color: #64748b; text-align: center; }
 
 #changelog { margin: 28px 0; }

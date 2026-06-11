@@ -2,7 +2,8 @@
 //   spark       — throughput (or latency) over daily runs
 //   dual spark  — memoryPerLine rows: Latency + GiB/s side by side
 //   trendMerge  — section-level merged latency + throughput charts (seq memory)
-//   percentile  — p50 vs p99 spread across runs (tail ops; object-storage style)
+//   percentile  — p50 vs p99 spread across runs (fat-tailed ops: SSD, network)
+//   memoryRunTrend — daily latency spark; popover shows min/p50 across runs (DRAM)
 //   none        — numbers only
 
 var MEMORY_TREND_READ = "#e85d04";
@@ -26,8 +27,8 @@ var TABLE = [
     title: "Random Memory R/W (64 bytes)",
     napkinLatency: "20 ns",
     rows: [
-      { key: "mem_random_read", sub: "Read", metric: "latency", trend: "percentile" },
-      { key: "mem_random_write", sub: "Write", metric: "latency", trend: "percentile" }
+      { key: "mem_random_read", sub: "Read", metric: "latency", trend: "spark", color: MEMORY_TREND_READ, latencyNs: true, memoryRunTrend: true },
+      { key: "mem_random_write", sub: "Write", metric: "latency", trend: "spark", color: MEMORY_TREND_WRITE, latencyNs: true, memoryRunTrend: true }
     ]
   },
   {
@@ -144,6 +145,13 @@ function hasOp(m, rowKey) {
   return !!resolveOpKey(m, rowKey);
 }
 
+function sectionPresentRows(sec, m) {
+  var matched = sec.rows.filter(function(row) { return hasOp(m, row.key); });
+  if (!matched.length) return [];
+  if (sec.rows.some(function(row) { return row.sub; })) return sec.rows;
+  return matched;
+}
+
 function getOp(m, rowKey) {
   var k = resolveOpKey(m, rowKey);
   return k ? m.ops[k] : null;
@@ -182,9 +190,11 @@ function boot(rows, changelog) {
       if (row.date > m.date) m.date = row.date;
     });
 
-    var machines = Object.keys(byMachine).sort(function(a, b) {
-      return byMachine[b].date.localeCompare(byMachine[a].date);
-    });
+    var machines = Object.keys(byMachine)
+      .filter(machineVisible)
+      .sort(function(a, b) {
+        return byMachine[b].date.localeCompare(byMachine[a].date);
+      });
 
     var bar = document.querySelector(".machine-bar");
     var table = document.getElementById("bench-table");
@@ -226,7 +236,7 @@ function boot(rows, changelog) {
       var prevGroup = null;
 
       TABLE.forEach(function(sec) {
-        var present = sec.rows.filter(function(row) { return hasOp(m, row.key); });
+        var present = sectionPresentRows(sec, m);
         if (!present.length) return;
 
         var group = tocGroup(sec.title);
@@ -333,6 +343,13 @@ function renderChangelog() {
 }
 
 function fillMetricCells(tr, row, csvRow) {
+  if (!csvRow) {
+    addCell(tr, "—");
+    addCell(tr, "—");
+    addCell(tr, "—");
+    addCell(tr, "—");
+    return;
+  }
   var lat_ns = parseFloat(csvRow.latency_ns);
   var thr = parseFloat(csvRow.throughput_bytes_s);
 
@@ -580,8 +597,9 @@ function appendSingleSparkTrend(td, row, m, label, machineKey) {
   var wrap = document.createElement("div");
   wrap.className = "spark-wrap";
   wrap.appendChild(makeSparkMiniVisual(points, row.color || "#e85d04", unit));
+  var runStats = row.memoryRunTrend ? runLatencyStats(getSeries(m, row.key)) : null;
   wrap.addEventListener("mouseenter", function(e) {
-    showSparkPopover(e, points, label, row.color || "#e85d04", machineKey, row.metric, row);
+    showSparkPopover(e, points, label, row.color || "#e85d04", machineKey, row.metric, row, runStats);
   });
   wrap.addEventListener("mousemove", positionPopover);
   wrap.addEventListener("mouseleave", hidePopover);
@@ -628,6 +646,7 @@ function makeSparkMiniVisual(points, color, unitLabel) {
 
 function sparkYUnit(metric, row) {
   if (metric === "throughput") return "GiB/s";
+  if (row && row.latencyNs) return "ns";
   if (row && row.memoryPerLine) return "Latency";
   return "μs";
 }
@@ -645,6 +664,8 @@ function seriesPoints(byDay, metric, row) {
       if (!isFinite(v)) return null;
       if (row && row.memoryPerLine) {
         v = perCacheLineNs(v);
+      } else if (row && row.latencyNs) {
+        // keep ns/access
       } else {
         v = v / 1000;
       }
@@ -668,6 +689,16 @@ function percentileFromSeries(byDay) {
     min: vals[0],
     max: vals[vals.length - 1]
   };
+}
+
+function runLatencyStats(byDay) {
+  if (!byDay) return null;
+  var vals = Object.keys(byDay).map(function(day) {
+    return parseFloat(byDay[day].latency_ns);
+  }).filter(isFinite).sort(function(a, b) { return a - b; });
+  if (!vals.length) return null;
+  var p50i = Math.floor(vals.length * 0.5);
+  return { min: vals[0], p50: vals[p50i], n: vals.length };
 }
 
 function makePercentileChart(pct, opts) {
@@ -715,11 +746,26 @@ function makePercentileChart(pct, opts) {
   return root;
 }
 
-function showSparkPopover(e, points, label, color, machineKey, metric, row) {
+function wrapMemoryRunTrendChart(chart, stats) {
+  var root = document.createElement("div");
+  root.className = "memory-run-trend-chart";
+  root.appendChild(chart);
+  if (stats) {
+    var footer = document.createElement("div");
+    footer.className = "memory-run-trend-footer";
+    footer.textContent = "min " + fmtLatency(stats.min) + " · p50 " + fmtLatency(stats.p50)
+      + " (across " + stats.n + " runs)";
+    root.appendChild(footer);
+  }
+  return root;
+}
+
+function showSparkPopover(e, points, label, color, machineKey, metric, row, runStats) {
   popoverMode = "spark";
   var title = shortMachine(machineKey) + " — " + label;
-  fillPopover(popover, "spark-popover-title", "spark-popover-body", title,
-    makePopoverChart(points, color, row, metric));
+  var chart = makePopoverChart(points, color, row, metric);
+  if (runStats) chart = wrapMemoryRunTrendChart(chart, runStats);
+  fillPopover(popover, "spark-popover-title", "spark-popover-body", title, chart);
   popover2.hidden = true;
   popover2.classList.remove("show");
   popover.hidden = false;
@@ -842,6 +888,10 @@ function svgText(svg, x, y, text, opts) {
 
 function fmtSparkY(v, yUnit, axisSpan) {
   axisSpan = axisSpan || Math.abs(v) || 1;
+  if (yUnit === "ns") {
+    if (axisSpan < 5) return v.toFixed(1);
+    return v.toFixed(0);
+  }
   if (yUnit === "Latency" || yUnit === "latency (ns)") {
     if (axisSpan < 0.2) return v.toFixed(2);
     if (axisSpan < 2) return v.toFixed(1);
@@ -1226,6 +1276,13 @@ function machineFromHash(machines) {
   if (!match) return null;
   var key = decodeURIComponent(match[1]);
   return machines.indexOf(key) >= 0 ? key : null;
+}
+
+function machineVisible(key) {
+  if (key === "apple-m4-pro") return false;
+  if (key.indexOf("gcp-") === 0) return gcpVcpuTier(key) === 48;
+  if (key.indexOf("aws-") === 0) return awsSizeTier(key) === 12;
+  return true;
 }
 
 function partitionByCloud(machines) {
