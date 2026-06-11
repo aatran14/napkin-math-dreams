@@ -29,7 +29,8 @@ pub fn sections() -> Vec<Section> {
             (true,  "seq_read_threaded",   memory::seq_read_threaded),
             (true,  "seq_write_single",    memory::seq_write_single),
             (true,  "seq_write_threaded",  memory::seq_write_threaded),
-            (false, "random_read",         memory::random_read),
+            (true,  "random_read",         memory::random_read),
+            (true,  "random_write",        memory::random_write),
         ]),
         section("syscall", &[
             (false, "getpid",              syscall::getpid),

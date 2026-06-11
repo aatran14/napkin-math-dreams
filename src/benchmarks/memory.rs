@@ -271,15 +271,14 @@ pub fn seq_write_threaded() -> Measurement {
 }
 
 /*
-Random read/write: per 64-byte cache-line latency over a 1 GiB buffer.
-Access order is shuffled once; each timed op touches one line (read or store).
-Reports ns/access (latency_ns) and derived MiB/s from 64 / latency.
+Random read/write: shuffled 64-byte cache-line walk over 1 GiB.
+Access order is randomized once; each pass touches every line exactly once.
+Timed with one clock read before and after each full pass (not per access).
 */
 
 struct RandomWalk {
     vec: Vec<[u64; 8]>,
     order: Vec<usize>,
-    i: usize,
 }
 
 fn random_walk_setup() -> RandomWalk {
@@ -294,35 +293,59 @@ fn random_walk_setup() -> RandomWalk {
     }
     let mut order: Vec<usize> = (0..n).collect();
     order.shuffle(&mut thread_rng());
-    RandomWalk { vec, order, i: 0 }
+    RandomWalk { vec, order }
 }
 
-fn random_walk_next(w: &mut RandomWalk) -> usize {
-    let idx = w.order[w.i];
-    w.i += 1;
-    if w.i >= w.order.len() {
-        w.i = 0;
+fn measure_random_passes(
+    name: &'static str,
+    bytes_per_access: usize,
+    measure_secs: u64,
+    accesses_per_pass: u64,
+    mut one_pass: impl FnMut(),
+) -> Measurement {
+    let warmup = Duration::from_secs(1);
+    let t = Instant::now();
+    while t.elapsed() < warmup {
+        one_pass();
     }
-    idx
+
+    let t = Instant::now();
+    let measure = Duration::from_secs(measure_secs);
+    let mut passes = 0u64;
+    while t.elapsed() < measure {
+        one_pass();
+        passes += 1;
+    }
+    let elapsed = t.elapsed();
+    let accesses = passes * accesses_per_pass;
+    let ns_per_op = elapsed.as_nanos() as f64 / accesses as f64;
+
+    Measurement {
+        name,
+        latency_ns: Some(ns_per_op),
+        throughput_bytes_s: Some(bytes_per_access as f64 / (ns_per_op / 1e9)),
+    }
 }
 
 pub fn random_read() -> Measurement {
-    let bytes_per_iter = 64;
-    let mut walk = random_walk_setup();
-    crate::benchmarks::bench("mem_random_read", bytes_per_iter, 5, || {
-        let idx = random_walk_next(&mut walk);
-        black_box(walk.vec[idx]);
+    let walk = random_walk_setup();
+    let n = walk.order.len();
+    measure_random_passes("mem_random_read", 64, 5, n as u64, || {
+        for &idx in &walk.order {
+            black_box(walk.vec[idx]);
+        }
     })
 }
 
 pub fn random_write() -> Measurement {
-    let bytes_per_iter = 64;
     let mut walk = random_walk_setup();
+    let n = walk.order.len();
     const WRITE_PATTERN: [u64; 8] = [8, 7, 6, 5, 4, 3, 2, 1];
-    crate::benchmarks::bench("mem_random_write", bytes_per_iter, 5, || {
-        let idx = random_walk_next(&mut walk);
-        walk.vec[idx] = WRITE_PATTERN;
-        black_box(walk.vec[idx]);
+    measure_random_passes("mem_random_write", 64, 5, n as u64, || {
+        for &idx in &walk.order {
+            walk.vec[idx] = WRITE_PATTERN;
+            black_box(walk.vec[idx]);
+        }
     })
 }
 
