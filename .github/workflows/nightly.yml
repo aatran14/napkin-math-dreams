@@ -71,11 +71,11 @@ jobs:
         run: |
           set -euo pipefail
           : > data/dead.csv   # capture only this run's rows
-          NAPKIN_GCP_ZONE="$GCP_ZONE" bash machines/bench-gcp-fleet.sh
-          bash machines/bench-aws-fleet.sh
+          NAPKIN_GCP_ZONE="$GCP_ZONE" bash machines/bench-gcp-fleet.sh c4-standard-48-lssd c4d-standard-48-lssd c4a-standard-48-lssd
+          bash machines/bench-aws-fleet.sh c7i.12xlarge c7a.12xlarge c7g.12xlarge
           # same-zone network: one matched VM pair per cloud (NIC is identical across
           # c4/c4d/c4a, so one pair suffices). Appends network_same_zone* rows to dead.csv.
-          NAPKIN_GCP_ZONE="$GCP_ZONE" bash machines/bench-net-fleet-gcp.sh c4-standard-16-lssd || echo "::warning::GCP net probe failed; keeping compute data"
+          NAPKIN_GCP_ZONE="$GCP_ZONE" bash machines/bench-net-fleet-gcp.sh c4-standard-48-lssd || echo "::warning::GCP net probe failed; keeping compute data"
           bash machines/bench-net-fleet-aws.sh c7i.12xlarge || echo "::warning::AWS net probe failed; keeping compute data"
 
       - name: Publish results to gh-pages
