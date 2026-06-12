@@ -1,3 +1,4 @@
+pub mod manifest;
 pub mod memory;
 pub mod readme;
 pub mod hash;

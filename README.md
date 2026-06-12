@@ -10,8 +10,7 @@ The make the best use of this repo, it's reccomended you look at Simon's first. 
 Master raw data: [data/dead.csv](data/dead.csv)
 
 ## Goals
-[x] What we are optimizing for right now
-[] What we're definitely not optimizing for
+It's worth noting what we are optimizing for right now and what we are definitely not optimizing for.
 
 What we are optimizing for right now is writing code that we can "fire-and-forget". It is the nature of benchmarking that you can p9999 hack, but in the interest of simplicity, the goal of this project is to arrive there at steady state. 
 
@@ -46,23 +45,34 @@ Target machines: one per architecture per cloud. Ideally is more transparent abo
 
 ## Running
 
-Run all benchmarks and print results to terminal:
+List manifest rows:
+
+```
+cargo run --release --bin daily -- list
+cargo run --release --bin daily -- list --nightly
+```
+
+Run one row (dev loop):
+
+```
+cargo run --release --bin daily -- run memory/random_read
+cargo run --release --bin daily -- run --section memory
+```
+
+Preview nightly rows (no CSV):
 
 ```
 cargo run --release --bin readme
+cargo run --release --bin readme memory
 ```
 
-Run memory benchmarks:
-
-```
-cargo run --release --bin memory
-```
-
-Daily run (appends to `data/dead.csv`):
+Daily run (all nightly rows, appends to `data/dead.csv`):
 
 ```
 cargo run --release --bin daily
 ```
+
+Add a row: copy `benchmarks/_template.toml`, implement the fn in Rust, register in `src/benchmarks/manifest.rs`.
 
 Run on a cloud VM (requires `gcloud` or `aws` CLI authenticated):
 

@@ -33,7 +33,3 @@ pub fn sort_u64() -> Measurement {
         throughput_bytes_s: Some(size_bytes as f64 / (ns_per_op / 1e9)),
     }
 }
-
-pub fn run() -> Vec<Measurement> {
-    vec![sort_u64()]
-}

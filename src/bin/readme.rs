@@ -1,14 +1,32 @@
-use napkin_math::benchmarks::{self, Measurement};
+use napkin_math::benchmarks::{manifest, Measurement};
 
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let section = parse_section(&args[1..]);
+
     eprintln!("napkin-math benchmarks\n");
-    for section in benchmarks::readme::sections() {
-        eprintln!("[{}]", section.name);
-        for m in &section.measurements {
-            print_row(m);
+    for sec in manifest::sections(true) {
+        if let Some(name) = section {
+            if sec.name != name {
+                continue;
+            }
+        }
+        eprintln!("[{}]", sec.name);
+        for m in manifest::run_rows(&sec.rows) {
+            print_row(&m);
         }
         eprintln!();
     }
+}
+
+fn parse_section(args: &[String]) -> Option<&str> {
+    if args.is_empty() {
+        return None;
+    }
+    if args[0] == "--section" {
+        return args.get(1).map(|s| s.as_str());
+    }
+    Some(args[0].as_str())
 }
 
 fn print_row(m: &Measurement) {

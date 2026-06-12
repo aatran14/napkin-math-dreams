@@ -58,7 +58,3 @@ pub fn context_switch() -> Measurement {
         throughput_bytes_s: None,
     }
 }
-
-pub fn run() -> Vec<Measurement> {
-    vec![getpid(), context_switch()]
-}

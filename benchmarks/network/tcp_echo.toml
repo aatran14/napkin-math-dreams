@@ -1,0 +1,3 @@
+key = "tcp_echo"
+section = "network"
+nightly = false

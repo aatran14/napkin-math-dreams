@@ -1,0 +1,3 @@
+key = "seq_write_no_fsync"
+section = "ssd"
+nightly = true

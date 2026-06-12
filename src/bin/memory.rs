@@ -1,15 +1,10 @@
-//! Sequential memory read and write (separate experiments, cold-cache passes).
-use napkin_math::benchmarks::memory;
+//! Memory section only — shorthand for `daily run --section memory`.
+use napkin_math::benchmarks::manifest;
 
 fn main() {
-    eprintln!("sequential memory — warm streaming bandwidth\n");
-
-    for m in [
-        memory::seq_read_single(),
-        memory::seq_read_threaded(),
-        memory::seq_write_single(),
-        memory::seq_write_threaded(),
-    ] {
+    let rows = manifest::list_rows(false, Some("memory"));
+    eprintln!("memory benchmarks ({} rows)\n", rows.len());
+    for m in manifest::run_rows(&rows) {
         let thr = m
             .throughput_bytes_s
             .map(|b| format!("{:.1} GiB/s", b / 1_073_741_824.0))

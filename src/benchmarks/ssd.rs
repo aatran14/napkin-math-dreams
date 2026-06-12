@@ -114,15 +114,6 @@ pub fn random_read() -> Measurement {
     m
 }
 
-pub fn run() -> Vec<Measurement> {
-    vec![
-        seq_read(),
-        seq_write_no_fsync(),
-        seq_write_fsync(),
-        random_read(),
-    ]
-}
-
 fn drop_caches(_path: &str) {
     #[cfg(target_os = "linux")]
     {

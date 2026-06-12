@@ -53,7 +53,3 @@ pub fn tcp_echo() -> Measurement {
         throughput_bytes_s: Some(buf_size as f64 / (ns_per_op / 1e9)),
     }
 }
-
-pub fn run() -> Vec<Measurement> {
-    vec![tcp_echo()]
-}

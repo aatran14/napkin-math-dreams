@@ -35,10 +35,3 @@ pub fn siphash() -> Measurement {
         black_box(hasher.finish());
     })
 }
-
-
-// Blake3?
-
-pub fn run() -> Vec<Measurement> {
-    vec![non_crypto(), crypto(), siphash()]
-}

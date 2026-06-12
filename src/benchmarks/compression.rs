@@ -25,10 +25,6 @@ pub fn decompress() -> Measurement {
     })
 }
 
-pub fn run() -> Vec<Measurement> {
-    vec![compress(), decompress()]
-}
-
 fn make_compressible_data(size: usize) -> Vec<u8> {
     // english-like text has ~2-4x compression ratio
     let words = b"the quick brown fox jumps over the lazy dog ";

@@ -349,17 +349,6 @@ pub fn random_write() -> Measurement {
     })
 }
 
-pub fn run() -> Vec<Measurement> {
-    vec![
-        seq_read_single(),
-        seq_read_threaded(),
-        seq_write_single(),
-        seq_write_threaded(),
-        random_read(),
-        random_write(),
-    ]
-}
-
 #[inline(never)]
 fn memory_read_vectorized(vec: &[Int]) -> u64 {
     #[cfg(target_arch = "x86_64")]

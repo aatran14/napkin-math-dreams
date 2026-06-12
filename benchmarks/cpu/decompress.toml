@@ -1,0 +1,3 @@
+key = "decompress"
+section = "cpu"
+nightly = false

@@ -1,0 +1,11 @@
+# Copy to benchmarks/<section>/<name>.toml
+#
+#   src/benchmarks/<section>.rs  →  pub fn <name>() -> Measurement
+#   src/benchmarks/manifest.rs   →  registry entry "<section>/<name>"
+#
+# Dev:   cargo run --release --bin daily -- run <section>/<name>
+# Fleet: set nightly = true, push master
+
+key = "<name>"
+section = "<section>"
+nightly = false

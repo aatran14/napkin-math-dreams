@@ -61,12 +61,3 @@ pub fn slow_deserialize() -> Measurement {
         black_box(serde_json::from_slice::<Record>(&encoded).unwrap());
     })
 }
-
-pub fn run() -> Vec<Measurement> {
-    vec![
-        fast_serialize(),
-        fast_deserialize(),
-        slow_serialize(),
-        slow_deserialize(),
-    ]
-}
