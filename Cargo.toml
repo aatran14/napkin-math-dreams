@@ -54,7 +54,3 @@ path = "src/bin/latency.rs"
 jemallocator = "*"
 rio = "0.9.3"
 perf-event = "0.4"
-
-[[bench]]
-name = "napkin_math"
-harness = false
