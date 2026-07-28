@@ -1,3 +1,4 @@
+date,machine,cpu,config,operation,latency_ns,throughput_bytes_s,commit
 2026-07-28T10:54:10,gcp-c4-standard-48-lssd,Intel Xeon 6985P-C,bench_stable,mem_random_read,33.10,1933694282,
 2026-07-28T10:54:10,gcp-c4-standard-48-lssd,Intel Xeon 6985P-C,bench_stable,mem_random_write,31.77,2014283203,
 2026-07-28T10:54:10,gcp-c4-standard-48-lssd,Intel Xeon 6985P-C,bench_stable,seq_mem_read_single,47832709.46,22447857046,
