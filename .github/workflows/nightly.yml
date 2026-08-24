@@ -4,6 +4,11 @@ name: Nightly Benchmarks
 # Runs the GCP + AWS fleets from the master checkout, then publishes data + index.html to gh-pages.
 # Auth: GCP service-account key (GCP_SA_KEY) + AWS keys (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_SSH_PRIVATE_KEY).
 #
+# The `daily` binary is built here on native runners and shipped to the benchmark
+# machines. Those machines therefore need no compiler, no rustup and no apt at
+# all, which removes the failure that used to cost us whole nights: the Ubuntu
+# arm64 ports mirror 503ing during `apt-get install build-essential`.
+#
 # NOTE: must live on the DEFAULT branch (master) for the schedule to fire.
 
 on:
@@ -21,9 +26,59 @@ concurrency:
 env:
   GCP_ZONE: ${{ vars.GCP_ZONE || 'us-east1-b' }}
   AWS_REGION: ${{ vars.AWS_REGION || 'us-east-2' }}
+  # The fleet, in one place, so the run step and the retry pass can't disagree
+  # about which machines are supposed to report.
+  GCP_MACHINES: c4-standard-48-lssd c4d-standard-48-lssd c4a-standard-48-lssd
+  AWS_MACHINES: c7i.12xlarge c7a.12xlarge c7g.12xlarge
+  NET_PROBE_GCP: c4-standard-48-lssd
+  NET_PROBE_AWS: c7i.12xlarge
 
 jobs:
+  # Native builds, so there is no cross-compilation to get wrong. The runner
+  # image and the benchmark VMs are both Ubuntu 24.04, so glibc matches.
+  # A break here costs nothing: no cloud resource is touched until this passes.
+  build:
+    name: Build daily (${{ matrix.arch }})
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      # The whole night now hangs off this job, so a mirror 503 here must not be
+      # the end of it.
+      - name: Install build deps
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if sudo apt-get update -qq \
+              && sudo apt-get install -y -qq build-essential pkg-config libssl-dev; then
+              exit 0
+            fi
+            echo "apt attempt $attempt failed, retrying in $((attempt * 10))s"
+            sleep $((attempt * 10))
+          done
+          echo "::error::apt failed 5 times, cannot build"
+          exit 1
+
+      - name: Build daily
+        run: cargo build --release --bin daily
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: daily-${{ matrix.arch }}
+          path: target/release/daily
+          if-no-files-found: error
+          retention-days: 7
+
   benchmark:
+    needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
@@ -35,6 +90,17 @@ jobs:
         with:
           ref: gh-pages
           path: site
+
+      - name: Fetch prebuilt daily binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: bin
+
+      - name: Make binaries executable
+        run: |
+          set -euo pipefail
+          chmod +x bin/daily-amd64/daily bin/daily-arm64/daily
+          file bin/daily-amd64/daily bin/daily-arm64/daily
 
       - id: auth
         uses: google-github-actions/auth@v2
@@ -68,19 +134,31 @@ jobs:
         env:
           CLOUDSDK_CORE_DISABLE_PROMPTS: "1" # don't block on ssh-key prompts in CI
           AWS_KEY_FILE: ~/.ssh/napkin-bench.pem
+          NAPKIN_BIN_DIR: bin
         run: |
           set -euo pipefail
-          : > data/dead.csv   # capture only this run's rows
-          NAPKIN_GCP_ZONE="$GCP_ZONE" bash machines/bench-gcp-fleet.sh c4-standard-48-lssd c4d-standard-48-lssd c4a-standard-48-lssd
-          bash machines/bench-aws-fleet.sh c7i.12xlarge c7a.12xlarge c7g.12xlarge
+          : > data/dead.csv             # capture only this run's rows
+          : > data/failed-machines.txt  # one line per machine that failed
+          # A fleet only exits non-zero when every one of its machines failed;
+          # that shouldn't stop the other cloud from running.
+          NAPKIN_GCP_ZONE="$GCP_ZONE" bash machines/bench-gcp-fleet.sh $GCP_MACHINES || true
+          bash machines/bench-aws-fleet.sh $AWS_MACHINES || true
+          # Zone stockouts are the usual remaining failure and they clear on their
+          # own, so give the missing machines one more shot.
+          NAPKIN_GCP_ZONE="$GCP_ZONE" bash machines/retry-failed.sh
           # same-zone network: one matched VM pair per cloud (NIC is identical across
-          # c4/c4d/c4a, so one pair suffices). Appends network_same_zone* rows to dead.csv.
-          NAPKIN_GCP_ZONE="$GCP_ZONE" bash machines/bench-net-fleet-gcp.sh c4-standard-48-lssd || echo "::warning::GCP net probe failed; keeping compute data"
-          bash machines/bench-net-fleet-aws.sh c7i.12xlarge || echo "::warning::AWS net probe failed; keeping compute data"
+          # c4/c4d/c4a, so one pair suffices). Appends network_inside_vpc* and
+          # network_outside_vpc* rows to dead.csv.
+          NAPKIN_GCP_ZONE="$GCP_ZONE" bash machines/bench-net-fleet-gcp.sh $NET_PROBE_GCP || echo "::warning::GCP net probe failed; keeping compute data"
+          bash machines/bench-net-fleet-aws.sh $NET_PROBE_AWS || echo "::warning::AWS net probe failed; keeping compute data"
 
       - name: Publish results to gh-pages
         run: |
           set -euo pipefail
+          if [ ! -s data/dead.csv ]; then
+            echo "::error::no machine produced results, nothing to publish"
+            exit 1
+          fi
           TODAY=$(date -u +%Y-%m-%d)
           {
             echo 'date,machine,cpu,config,operation,latency_ns,throughput_bytes_s,commit'
@@ -96,3 +174,17 @@ jobs:
           git diff --cached --quiet && echo "No changes to commit" && exit 0
           git commit -m "bench: ${TODAY} results"
           git push origin gh-pages
+
+      - name: Report machines missing from this run
+        if: always()
+        run: |
+          if [ ! -s data/failed-machines.txt ]; then
+            echo "All machines reported." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "### Machines missing from this run" >> "$GITHUB_STEP_SUMMARY"
+          while IFS=$'\t' read -r cloud machine status || [ -n "${cloud:-}" ]; do
+            [ -n "${machine:-}" ] || continue
+            echo "::warning::$cloud $machine failed twice, no data tonight (exit $status)"
+            echo "- \`$cloud $machine\` exit $status" >> "$GITHUB_STEP_SUMMARY"
+          done < data/failed-machines.txt
