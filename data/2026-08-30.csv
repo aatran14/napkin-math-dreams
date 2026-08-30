@@ -1,3 +1,4 @@
+date,machine,cpu,config,operation,latency_ns,throughput_bytes_s,commit
 2026-08-30T14:44:29,aws-c7i.12xlarge,Intel Xeon Platinum 8488C,bench_stable,mem_random_read,26.27,2436511555,
 2026-08-30T14:44:29,aws-c7i.12xlarge,Intel Xeon Platinum 8488C,bench_stable,mem_random_write,23.92,2675041502,
 2026-08-30T14:44:29,aws-c7i.12xlarge,Intel Xeon Platinum 8488C,bench_stable,seq_mem_read_single,104206519.32,10303979357,
